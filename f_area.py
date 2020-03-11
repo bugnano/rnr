@@ -40,12 +40,12 @@ class FArea(urwid.WidgetWrap):
 	def __init__(self):
 		widgets = []
 		for i, label in enumerate(texts):
-			w = urwid.Text(('white_on_black', f'{i + 1}'), align='right')
+			w = urwid.Text(f'{i + 1}', align='right')
 			w = urwid.Filler(w)
 			w = urwid.AttrMap(w, 'white_on_black')
 			widgets.append((2, w))
 
-			w = urwid.Text(('menu', label))
+			w = urwid.Text(label)
 			w = urwid.Filler(w)
 			w = urwid.AttrMap(w, 'menu')
 			widgets.append(w)

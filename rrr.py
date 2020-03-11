@@ -27,11 +27,17 @@ import cmdarea
 import f_area
 
 
+COLOUR_PANEL_BG = 'dark blue'
+COLOUR_SELECT_BG = 'dark cyan'
+COLOUR_MENU_BG = 'dark cyan'
+
 palette = [
 	('banner', 'black', 'light gray'),
 	('streak', 'black', 'dark red'),
-	('bg', 'light gray', 'dark blue'),
-	('menu', 'black', 'dark cyan'),
+	('bg', 'light gray', COLOUR_PANEL_BG),
+	('dir', 'white', COLOUR_PANEL_BG),
+	('focus', 'black', COLOUR_SELECT_BG),
+	('menu', 'black', COLOUR_MENU_BG),
 	('normal', 'default', 'default'),
 	('white_on_black', 'white', 'black'),
 ]
@@ -45,8 +51,8 @@ def exit_on_q(key):
 class Screen(urwid.WidgetWrap):
 	def __init__(self):
 		top = menu.Menu()
-		left = panel.Panel('Left')
-		right = panel.Panel('Right')
+		left = panel.Panel()
+		right = panel.Panel()
 		center = urwid.Columns([left, right])
 		command_area = cmdarea.CmdArea()
 		bottom = f_area.FArea()

@@ -35,7 +35,7 @@ class Menu(urwid.WidgetWrap):
 	def __init__(self):
 		widgets = []
 		for label in texts:
-			w = urwid.Text(('menu', label), align='center')
+			w = urwid.Text(label, align='center')
 			w = urwid.Filler(w)
 			w = urwid.AttrMap(w, 'menu')
 			widgets.append((len(label) + 4, w))

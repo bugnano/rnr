@@ -19,15 +19,51 @@
 import sys
 import os
 
+import pathlib
+
 import urwid
 
 
+class SelectableText(urwid.Text):
+	_selectable = True
+
+	def keypress(self, size, key):
+		return key
+
+
+class VimListBox(urwid.ListBox):
+	def keypress(self, size, key):
+		if key == 'h':
+			pass
+		elif key == 'j':
+			return super().keypress(size, 'down')
+		elif key == 'k':
+			return super().keypress(size, 'up')
+		elif key == 'l':
+			pass
+		elif key == 'g':
+			return super().keypress(size, 'home')
+		elif key == 'G':
+			return super().keypress(size, 'end')
+		elif key == 'ctrl b':
+			return super().keypress(size, 'page up')
+		elif key == 'ctrl f':
+			return super().keypress(size, 'page down')
+		else:
+			return super().keypress(size, key)
+
+
 class Panel(urwid.WidgetWrap):
-	def __init__(self, label):
-		w = urwid.Text(('banner', f' {label} '), align='center')
-		w = urwid.AttrMap(w, 'streak')
-		w = urwid.Filler(w)
-		w = urwid.LineBox(w, label)
+	def __init__(self):
+		cwd = pathlib.Path.cwd()
+		files = list(cwd.iterdir())
+		dirs = [files.pop(i) for i, e in reversed(list(enumerate(files))) if e.is_dir()]
+		labels = [urwid.AttrMap(SelectableText('../'), 'dir', 'focus')]
+		labels.extend([urwid.AttrMap(SelectableText(f'{x.name}/'), 'dir', 'focus') for x in sorted(dirs)])
+		labels.extend([urwid.AttrMap(SelectableText(f'{x.name}'), 'bg', 'focus') for x in sorted(files)])
+		w = VimListBox(urwid.SimpleFocusListWalker(labels))
+
+		w = urwid.LineBox(w, str(cwd), 'left')
 		w = urwid.AttrMap(w, 'bg')
 
 		urwid.WidgetWrap.__init__(self, w)

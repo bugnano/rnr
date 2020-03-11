@@ -24,7 +24,7 @@ import urwid
 
 class CmdArea(urwid.WidgetWrap):
 	def __init__(self):
-		w = urwid.Text(('normal', ':'))
+		w = urwid.Text(':')
 		w = urwid.Filler(w)
 		w = urwid.AttrMap(w, 'normal')
 

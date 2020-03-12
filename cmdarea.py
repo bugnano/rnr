@@ -28,5 +28,5 @@ class CmdArea(urwid.WidgetWrap):
 		w = urwid.Filler(w)
 		w = urwid.AttrMap(w, 'normal')
 
-		urwid.WidgetWrap.__init__(self, w)
+		super().__init__(w)
 

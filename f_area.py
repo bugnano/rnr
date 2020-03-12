@@ -52,5 +52,5 @@ class FArea(urwid.WidgetWrap):
 
 		w = urwid.Columns(widgets)
 
-		urwid.WidgetWrap.__init__(self, w)
+		super().__init__(w)
 

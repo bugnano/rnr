@@ -58,7 +58,7 @@ class Screen(urwid.WidgetWrap):
 		bottom = f_area.FArea()
 		w = urwid.Pile([(1, top), center, (1, command_area), (1, bottom)])
 
-		urwid.WidgetWrap.__init__(self, w)
+		super().__init__(w)
 
 
 def main():

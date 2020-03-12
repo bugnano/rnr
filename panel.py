@@ -20,12 +20,28 @@ import sys
 import os
 
 import pathlib
+import stat
 
 import urwid
 
 
-class SelectableText(urwid.Text):
-	_selectable = True
+def human_readable_size(size):
+	if size < 1024:
+		return f'{size:>5d} B'
+
+	for suffix in ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']:
+		size /= 1024
+		if size < 1024:
+			break
+
+	return f'{size:>5.{max(4 - len(str(int(size))), 0)}f} {suffix}'
+
+
+class SelectableColumns(urwid.Columns):
+	def __init__(self, widget_list, dividechars=0, focus_column=None, min_width=1, box_columns=None):
+		super().__init__(widget_list, dividechars, focus_column, min_width, box_columns)
+
+		self._selectable = True
 
 	def keypress(self, size, key):
 		return key
@@ -33,14 +49,14 @@ class SelectableText(urwid.Text):
 
 class VimListBox(urwid.ListBox):
 	def keypress(self, size, key):
-		if key == 'h':
-			pass
+		if key in ('h', 'left'):
+			self.model.chdir(self.model.cwd.parent)
 		elif key == 'j':
 			return super().keypress(size, 'down')
 		elif key == 'k':
 			return super().keypress(size, 'up')
-		elif key == 'l':
-			pass
+		elif key in ('l', 'right', 'enter'):
+			self.model.execute(*self.model.walker.get_focus()[0].model)
 		elif key == 'g':
 			return super().keypress(size, 'home')
 		elif key == 'G':
@@ -55,16 +71,68 @@ class VimListBox(urwid.ListBox):
 
 class Panel(urwid.WidgetWrap):
 	def __init__(self):
-		cwd = pathlib.Path.cwd()
-		files = list(cwd.iterdir())
-		dirs = [files.pop(i) for i, e in reversed(list(enumerate(files))) if e.is_dir()]
-		labels = [urwid.AttrMap(SelectableText('../'), 'dir', 'focus')]
-		labels.extend([urwid.AttrMap(SelectableText(f'{x.name}/'), 'dir', 'focus') for x in sorted(dirs)])
-		labels.extend([urwid.AttrMap(SelectableText(f'{x.name}'), 'bg', 'focus') for x in sorted(files)])
-		w = VimListBox(urwid.SimpleFocusListWalker(labels))
+		self.walker = urwid.SimpleFocusListWalker([])
+		self.listbox = VimListBox(self.walker)
+		self.listbox.model = self
 
-		w = urwid.LineBox(w, str(cwd), 'left')
-		w = urwid.AttrMap(w, 'bg')
+		self.border = urwid.LineBox(self.listbox, '.', 'left')
+		w = urwid.AttrMap(self.border, 'bg')
 
-		urwid.WidgetWrap.__init__(self, w)
+		self.cwd = None
+		self.chdir('.')
+		self.walker.set_focus(0)
+
+		super().__init__(w)
+
+	def chdir(self, cwd):
+		old_cwd = self.cwd
+		self.cwd = pathlib.Path(cwd).resolve()
+
+		files = []
+		dirs = []
+		try:
+			for file in self.cwd.iterdir():
+				try:
+					st = file.stat()
+					if stat.S_ISDIR(st.st_mode):
+						dirs.append((file, st))
+					else:
+						files.append((file, st))
+				except (FileNotFoundError, PermissionError):
+					pass
+		except PermissionError:
+			self.cwd = old_cwd
+			return
+
+		files.sort()
+		dirs.sort()
+
+		focus = 0
+		labels = []
+		for file, st in dirs:
+			try:
+				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}/'), ('pack', urwid.Text(f'{len(list(file.iterdir()))}'))]), 'dir', 'focus')
+			except PermissionError:
+				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}/'), ('pack', urwid.Text(f'?'))]), 'dir', 'focus')
+
+			if file == old_cwd:
+				focus = len(labels)
+
+			w.model = (file, st)
+			labels.append(w)
+
+		for file, st in files:
+			w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}'), ('pack', urwid.Text(f'{human_readable_size(st.st_size)}'))]), 'bg', 'focus')
+
+			w.model = (file, st)
+			labels.append(w)
+
+		self.walker[:] = labels
+		self.walker.set_focus(focus)
+
+		self.border.set_title(str(self.cwd))
+
+	def execute(self, file, st):
+		if stat.S_ISDIR(st.st_mode):
+			self.chdir(file)
 

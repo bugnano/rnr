@@ -43,5 +43,5 @@ class Menu(urwid.WidgetWrap):
 		w = urwid.Columns(widgets)
 		w = urwid.AttrMap(w, 'menu')
 
-		urwid.WidgetWrap.__init__(self, w)
+		super().__init__(w)
 

@@ -19,12 +19,17 @@
 import sys
 import os
 
+import argparse
+
 import urwid
 
 import menu
 import panel
 import cmdarea
 import f_area
+
+
+__version__ = '0.0.1'
 
 
 COLOUR_PANEL_BG = 'dark blue'
@@ -43,28 +48,51 @@ palette = [
 ]
 
 
-def exit_on_q(key):
-    if key in ('q', 'Q'):
-        raise urwid.ExitMainLoop()
-
-
 class Screen(urwid.WidgetWrap):
 	def __init__(self):
 		top = menu.Menu()
 		left = panel.Panel()
 		right = panel.Panel()
-		center = urwid.Columns([left, right])
+		self.center = urwid.Columns([left, right])
 		command_area = cmdarea.CmdArea()
 		bottom = f_area.FArea()
-		w = urwid.Pile([(1, top), center, (1, command_area), (1, bottom)])
+		w = urwid.Pile([(1, top), self.center, (1, command_area), (1, bottom)])
 
 		super().__init__(w)
 
 
+class App(object):
+	def __init__(self, printwd):
+		self.printwd = printwd
+		self.screen = Screen()
+		self.center = self.screen.center
+
+	def keypress(self, key):
+		if key in ('q', 'Q', 'f10'):
+			if self.printwd:
+				try:
+					with open(self.printwd, 'w') as fp:
+						fp.write(str(self.center.focus.cwd))
+				except (FileNotFoundError, PermissionError):
+					pass
+
+			raise urwid.ExitMainLoop()
+		elif key == 'tab':
+			self.center.focus_position ^= 1
+
+	def run(self):
+		loop = urwid.MainLoop(self.screen, palette, unhandled_input=self.keypress)
+		loop.run()
+
+
 def main():
-	screen = Screen()
-	loop = urwid.MainLoop(screen, palette, unhandled_input=exit_on_q)
-	loop.run()
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-V', '--version', action='version', version=f'%(prog)s {__version__}')
+	parser.add_argument('-P', '--printwd', help='Print last working directory to specified file', metavar='<file>')
+	args = parser.parse_args()
+
+	app = App(args.printwd)
+	app.run()
 
 
 if __name__ == '__main__':

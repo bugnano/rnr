@@ -27,14 +27,14 @@ import urwid
 
 def human_readable_size(size):
 	if size < 1024:
-		return f'{size:>5d} B'
+		return f'{size:d} B'
 
 	for suffix in ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']:
 		size /= 1024
 		if size < 1024:
 			break
 
-	return f'{size:>5.{max(4 - len(str(int(size))), 0)}f} {suffix}'
+	return f'{size:.{max(4 - len(str(int(size))), 1)}f} {suffix}'
 
 
 class SelectableColumns(urwid.Columns):
@@ -56,7 +56,10 @@ class VimListBox(urwid.ListBox):
 		elif key == 'k':
 			return super().keypress(size, 'up')
 		elif key in ('l', 'right', 'enter'):
-			self.model.execute(*self.model.walker.get_focus()[0].model)
+			try:
+				self.model.execute(*self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				pass
 		elif key == 'g':
 			return super().keypress(size, 'home')
 		elif key == 'G':
@@ -69,6 +72,29 @@ class VimListBox(urwid.ListBox):
 			return super().keypress(size, key)
 
 
+class TildeTextLayout(urwid.TextLayout):
+	def layout(self, text, width, align, wrap):
+		if len(text) <= width:
+			return [[(len(text), 0, text.encode('utf-8'))]]
+
+		full_len = max(width - 1, 2)
+		half = int(full_len / 2)
+		left = half
+		right = full_len - left
+
+		return [[(width, 0, f'{text[:left]}~{text[-right:]}'[:width].encode('utf-8'))]]
+
+	def pack(self, maxcol, layout):
+		maxwidth = 0
+		for l in layout:
+			for line in l:
+				maxwidth = max(line[0], maxwidth)
+
+		return min(maxwidth, maxcol)
+
+TildeLayout = TildeTextLayout()
+
+
 class Panel(urwid.WidgetWrap):
 	def __init__(self):
 		self.walker = urwid.SimpleFocusListWalker([])
@@ -76,6 +102,11 @@ class Panel(urwid.WidgetWrap):
 		self.listbox.model = self
 
 		self.border = urwid.LineBox(self.listbox, '.', 'left')
+
+		# WARNING: title_widget and tline_widget are implementation details, and could break in the future
+		self.border.title_widget = urwid.Text(' . ', layout=TildeLayout)
+		self.border.tline_widget.contents[0] = (self.border.title_widget, self.border.tline_widget.options('pack'))
+
 		w = urwid.AttrMap(self.border, 'bg')
 
 		self.cwd = None
@@ -111,9 +142,11 @@ class Panel(urwid.WidgetWrap):
 		labels = []
 		for file, st in dirs:
 			try:
-				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}/'), ('pack', urwid.Text(f'{len(list(file.iterdir()))}'))]), 'dir', 'focus')
+				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}/', layout=TildeLayout), ('pack', urwid.Text(f'{len(list(file.iterdir()))}'))], dividechars=1), 'dir', 'focus')
 			except PermissionError:
-				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}/'), ('pack', urwid.Text(f'?'))]), 'dir', 'focus')
+				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}/', layout=TildeLayout), ('pack', urwid.Text(f'?'))], dividechars=1), 'dir', 'focus')
+			except FileNotFoundError:
+				continue
 
 			if file == old_cwd:
 				focus = len(labels)
@@ -122,7 +155,10 @@ class Panel(urwid.WidgetWrap):
 			labels.append(w)
 
 		for file, st in files:
-			w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}'), ('pack', urwid.Text(f'{human_readable_size(st.st_size)}'))]), 'bg', 'focus')
+			try:
+				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}', layout=TildeLayout), ('pack', urwid.Text(f'{human_readable_size(st.st_size)}'))], dividechars=1), 'bg', 'focus')
+			except FileNotFoundError:
+				continue
 
 			w.model = (file, st)
 			labels.append(w)

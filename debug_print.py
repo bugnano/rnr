@@ -19,29 +19,16 @@
 import sys
 import os
 
-import urwid
+
+debug_fp = None
 
 
-texts = [
-	'Left ',
-	'File ',
-	'Command ',
-	'Options ',
-	'Right ',
-]
+def debug_print(*args, **kwargs):
+	if debug_fp:
+		print(*args, **kwargs, file=debug_fp)
 
 
-class Menu(urwid.WidgetWrap):
-	def __init__(self):
-		widgets = []
-		for label in texts:
-			w = urwid.Text(label, align='center')
-			w = urwid.Filler(w)
-			w = urwid.AttrMap(w, 'menu')
-			widgets.append((len(label) + 4, w))
-
-		w = urwid.Columns(widgets)
-		w = urwid.AttrMap(w, 'menu')
-
-		super().__init__(w)
+def set_debug_fp(fp):
+	global debug_fp
+	debug_fp = fp
 

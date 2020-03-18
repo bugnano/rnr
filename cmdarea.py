@@ -21,11 +21,18 @@ import os
 
 import urwid
 
+class CmdEdit(urwid.Edit):
+	def keypress(self, size, key):
+		if key in ('up', 'down'):
+			pass
+		else:
+			return super().keypress(size, key)
+
 
 class CmdArea(urwid.WidgetWrap):
 	def __init__(self):
-		w = urwid.Text(':')
-		w = urwid.Filler(w)
+		self.edit = CmdEdit()
+		w = urwid.Filler(self.edit)
 		w = urwid.AttrMap(w, 'normal')
 
 		super().__init__(w)

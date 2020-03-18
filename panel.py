@@ -21,8 +21,12 @@ import os
 
 import pathlib
 import stat
+import datetime
+import functools
 
 import urwid
+
+from debug_print import debug_print
 
 
 def human_readable_size(size):
@@ -35,6 +39,65 @@ def human_readable_size(size):
 			break
 
 	return f'{size:.{max(4 - len(str(int(size))), 1)}f} {suffix}'
+
+def format_date(d):
+	d = datetime.datetime.fromtimestamp(d)
+	today = datetime.date.today()
+	if d.date() == today:
+		return d.strftime('%H:%M').center(7)
+	elif d.year == today.year:
+		return d.strftime('%b %d').center(7)
+	else:
+		return d.strftime('%Y-%m').center(7)
+
+
+def sort_by_name(a, b):
+	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
+		return -1
+	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
+		return 1
+	elif a['file'].name < b['file'].name:
+		return -1
+	elif a['file'].name > b['file'].name:
+		return 1
+	else:
+		return 0
+
+def sort_by_extension(a, b):
+	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
+		return -1
+	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
+		return 1
+	elif a['file'].suffix < b['file'].suffix:
+		return -1
+	elif a['file'].suffix > b['file'].suffix:
+		return 1
+	else:
+		return sort_by_name(a, b)
+
+def sort_by_date(a, b):
+	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
+		return -1
+	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
+		return 1
+	elif a['stat'].st_mtime < b['stat'].st_mtime:
+		return -1
+	elif a['stat'].st_mtime > b['stat'].st_mtime:
+		return 1
+	else:
+		return sort_by_name(a, b)
+
+def sort_by_size(a, b):
+	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
+		return -1
+	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
+		return 1
+	elif a['length'] < b['length']:
+		return -1
+	elif a['length'] > b['length']:
+		return 1
+	else:
+		return sort_by_name(a, b)
 
 
 class SelectableColumns(urwid.Columns):
@@ -51,13 +114,21 @@ class VimListBox(urwid.ListBox):
 	def keypress(self, size, key):
 		if key in ('h', 'left'):
 			self.model.chdir(self.model.cwd.parent)
-		elif key == 'j':
-			return super().keypress(size, 'down')
-		elif key == 'k':
-			return super().keypress(size, 'up')
+		elif key in ('j', 'down'):
+			try:
+				if (self.focus_position + 1) < len(self.model.walker):
+					return super().keypress(size, 'down')
+			except IndexError:
+				pass
+		elif key in ('k', 'up'):
+			try:
+				if self.focus_position > 0:
+					return super().keypress(size, 'up')
+			except IndexError:
+				pass
 		elif key in ('l', 'right', 'enter'):
 			try:
-				self.model.execute(*self.model.walker.get_focus()[0].model)
+				self.model.execute(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				pass
 		elif key == 'g':
@@ -110,6 +181,9 @@ class Panel(urwid.WidgetWrap):
 		w = urwid.AttrMap(self.border, 'bg')
 
 		self.cwd = None
+		self.files = []
+		self.shown_files = []
+		self.filtered_files = []
 		self.chdir('.')
 		self.walker.set_focus(0)
 
@@ -119,48 +193,63 @@ class Panel(urwid.WidgetWrap):
 		old_cwd = self.cwd
 		self.cwd = pathlib.Path(cwd).resolve()
 
-		files = []
-		dirs = []
+		self.files = []
 		try:
 			for file in self.cwd.iterdir():
+				obj = {
+					'file': file,
+				}
+
 				try:
-					st = file.stat()
-					if stat.S_ISDIR(st.st_mode):
-						dirs.append((file, st))
+					obj['stat'] = file.stat()
+					if stat.S_ISDIR(obj['stat'].st_mode):
+						if file.is_symlink():
+							obj['name'] = f'~{file.name}'
+						else:
+							obj['name'] = f'/{file.name}'
+
+						obj['palette'] = 'dir'
+
+						try:
+							obj['length'] = len(list(file.iterdir()))
+							obj['size'] = str(obj['length'])
+						except (FileNotFoundError, PermissionError):
+							obj['length'] = -1
+							obj['size'] = '?'
 					else:
-						files.append((file, st))
+						if stat.S_ISLNK(obj['stat'].st_mode):
+							obj['name'] = f'@{file.name}'
+							obj['palette'] = 'bg'
+						elif obj['stat'].st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+							obj['name'] = f'*{file.name}'
+							obj['palette'] = 'executable'
+						else:
+							obj['name'] = f' {file.name}'
+							obj['palette'] = 'bg'
+
+						obj['length'] = obj['stat'].st_size
+						obj['size'] = human_readable_size(obj['length'])
+
+					self.files.append(obj)
 				except (FileNotFoundError, PermissionError):
 					pass
 		except PermissionError:
 			self.cwd = old_cwd
 			return
 
-		files.sort()
-		dirs.sort()
+		self.shown_files = [x for x in self.files if not x['file'].name.startswith('.')]
+		self.filtered_files = self.shown_files[:]
+		self.filtered_files.sort(key=functools.cmp_to_key(sort_by_name))
 
 		focus = 0
 		labels = []
-		for file, st in dirs:
-			try:
-				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}/', layout=TildeLayout), ('pack', urwid.Text(f'{len(list(file.iterdir()))}'))], dividechars=1), 'dir', 'focus')
-			except PermissionError:
-				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}/', layout=TildeLayout), ('pack', urwid.Text(f'?'))], dividechars=1), 'dir', 'focus')
-			except FileNotFoundError:
-				continue
+		for file in self.filtered_files:
+			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['name'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['stat'].st_mtime)))], dividechars=1), file['palette'], 'focus')
+			w.model = file
 
-			if file == old_cwd:
+			if file['file'] == old_cwd:
 				focus = len(labels)
 
-			w.model = (file, st)
-			labels.append(w)
-
-		for file, st in files:
-			try:
-				w = urwid.AttrMap(SelectableColumns([urwid.Text(f'{file.name}', layout=TildeLayout), ('pack', urwid.Text(f'{human_readable_size(st.st_size)}'))], dividechars=1), 'bg', 'focus')
-			except FileNotFoundError:
-				continue
-
-			w.model = (file, st)
 			labels.append(w)
 
 		self.walker[:] = labels
@@ -168,7 +257,10 @@ class Panel(urwid.WidgetWrap):
 
 		self.border.set_title(str(self.cwd))
 
-	def execute(self, file, st):
-		if stat.S_ISDIR(st.st_mode):
-			self.chdir(file)
+	def execute(self, file):
+		if stat.S_ISDIR(file['stat'].st_mode):
+			self.chdir(file['file'])
+
+	def filter(self, filter):
+		debug_print(f'filter: {filter}')
 

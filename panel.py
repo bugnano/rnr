@@ -26,6 +26,8 @@ import functools
 
 import urwid
 
+from fuzzyfinder import fuzzyfinder
+
 from debug_print import debug_print
 
 
@@ -51,53 +53,53 @@ def format_date(d):
 		return d.strftime('%Y-%m').center(7)
 
 
-def sort_by_name(a, b):
+def sort_by_name(a, b, reverse=False):
 	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
-		return -1
+		return (1 if reverse else -1)
 	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
-		return 1
-	elif a['file'].name < b['file'].name:
+		return (-1 if reverse else 1)
+	elif a['name'] < b['name']:
 		return -1
-	elif a['file'].name > b['file'].name:
+	elif a['name'] > b['name']:
 		return 1
 	else:
 		return 0
 
-def sort_by_extension(a, b):
+def sort_by_extension(a, b, reverse=False):
 	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
-		return -1
+		return (1 if reverse else -1)
 	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
-		return 1
-	elif a['file'].suffix < b['file'].suffix:
+		return (-1 if reverse else 1)
+	elif a['extension'] < b['extension']:
 		return -1
-	elif a['file'].suffix > b['file'].suffix:
+	elif a['extension'] > b['extension']:
 		return 1
 	else:
-		return sort_by_name(a, b)
+		return sort_by_name(a, b, reverse)
 
-def sort_by_date(a, b):
+def sort_by_date(a, b, reverse=False):
 	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
-		return -1
+		return (1 if reverse else -1)
 	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
-		return 1
+		return (-1 if reverse else 1)
 	elif a['stat'].st_mtime < b['stat'].st_mtime:
 		return -1
 	elif a['stat'].st_mtime > b['stat'].st_mtime:
 		return 1
 	else:
-		return sort_by_name(a, b)
+		return sort_by_name(a, b, reverse)
 
-def sort_by_size(a, b):
+def sort_by_size(a, b, reverse=False):
 	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
-		return -1
+		return (1 if reverse else -1)
 	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
-		return 1
+		return (-1 if reverse else 1)
 	elif a['length'] < b['length']:
 		return -1
 	elif a['length'] > b['length']:
 		return 1
 	else:
-		return sort_by_name(a, b)
+		return sort_by_name(a, b, reverse)
 
 
 class SelectableColumns(urwid.Columns):
@@ -181,32 +183,37 @@ class Panel(urwid.WidgetWrap):
 		w = urwid.AttrMap(self.border, 'bg')
 
 		self.cwd = None
+		self.reverse = False
+		self.file_filter = ''
 		self.files = []
-		self.shown_files = []
 		self.filtered_files = []
-		self.chdir('.')
+		self.shown_files = []
+		self.chdir(pathlib.Path.cwd())
 		self.walker.set_focus(0)
 
 		super().__init__(w)
 
 	def chdir(self, cwd):
 		old_cwd = self.cwd
-		self.cwd = pathlib.Path(cwd).resolve()
+		self.cwd = pathlib.Path(cwd)
+		self.border.set_title(str(self.cwd))
 
-		self.files = []
+		files = []
 		try:
 			for file in self.cwd.iterdir():
 				obj = {
 					'file': file,
+					'name': file.name.casefold(),
+					'extension': file.suffix.casefold(),
 				}
 
 				try:
 					obj['stat'] = file.stat()
 					if stat.S_ISDIR(obj['stat'].st_mode):
 						if file.is_symlink():
-							obj['name'] = f'~{file.name}'
+							obj['label'] = f'~{file.name}'
 						else:
-							obj['name'] = f'/{file.name}'
+							obj['label'] = f'/{file.name}'
 
 						obj['palette'] = 'dir'
 
@@ -218,36 +225,41 @@ class Panel(urwid.WidgetWrap):
 							obj['size'] = '?'
 					else:
 						if stat.S_ISLNK(obj['stat'].st_mode):
-							obj['name'] = f'@{file.name}'
+							obj['label'] = f'@{file.name}'
 							obj['palette'] = 'bg'
 						elif obj['stat'].st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
-							obj['name'] = f'*{file.name}'
+							obj['label'] = f'*{file.name}'
 							obj['palette'] = 'executable'
 						else:
-							obj['name'] = f' {file.name}'
+							obj['label'] = f' {file.name}'
 							obj['palette'] = 'bg'
 
 						obj['length'] = obj['stat'].st_size
 						obj['size'] = human_readable_size(obj['length'])
 
-					self.files.append(obj)
+					files.append(obj)
 				except (FileNotFoundError, PermissionError):
 					pass
 		except PermissionError:
 			self.cwd = old_cwd
+			self.border.set_title(str(self.cwd))
 			return
 
+		self.files = files
 		self.shown_files = [x for x in self.files if not x['file'].name.startswith('.')]
-		self.filtered_files = self.shown_files[:]
-		self.filtered_files.sort(key=functools.cmp_to_key(sort_by_name))
+		self.apply_filter('')
+		self.update_list_box(old_cwd)
+
+	def update_list_box(self, focus_path):
+		self.filtered_files.sort(key=functools.cmp_to_key(functools.partial(sort_by_name, reverse=self.reverse)), reverse=self.reverse)
 
 		focus = 0
 		labels = []
 		for file in self.filtered_files:
-			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['name'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['stat'].st_mtime)))], dividechars=1), file['palette'], 'focus')
+			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['label'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['stat'].st_mtime)))], dividechars=1), file['palette'], 'focus')
 			w.model = file
 
-			if file['file'] == old_cwd:
+			if file['file'] == focus_path:
 				focus = len(labels)
 
 			labels.append(w)
@@ -255,12 +267,31 @@ class Panel(urwid.WidgetWrap):
 		self.walker[:] = labels
 		self.walker.set_focus(focus)
 
-		self.border.set_title(str(self.cwd))
+	def apply_filter(self, filter):
+		if filter:
+			self.filtered_files = list(fuzzyfinder(filter, self.shown_files, accessor=lambda x: x['name']))
+		else:
+			self.filtered_files = self.shown_files[:]
 
 	def execute(self, file):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
 
 	def filter(self, filter):
-		debug_print(f'filter: {filter}')
+		if not filter:
+			try:
+				focus_path = self.walker.get_focus()[0].model['file']
+			except AttributeError:
+				focus_path = None
+
+		self.apply_filter(filter)
+
+		if self.filtered_files:
+			if filter:
+				focus_path = self.filtered_files[0]['file']
+				debug_print(f'focus_path: {focus_path}')
+		else:
+			focus_path = None
+
+		self.update_list_box(focus_path)
 

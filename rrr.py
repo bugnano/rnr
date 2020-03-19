@@ -54,7 +54,7 @@ class Screen(urwid.WidgetWrap):
 		left = panel.Panel()
 		right = panel.Panel()
 		self.center = urwid.Columns([left, right])
-		self.command_area = cmdarea.CmdArea()
+		self.command_area = cmdarea.CmdArea(self)
 		bottom = f_area.FArea()
 		self.pile = urwid.Pile([self.center, (1, self.command_area), (1, bottom)])
 		self.pile.focus_position = 0
@@ -67,10 +67,6 @@ class App(object):
 		self.printwd = printwd
 
 		self.screen = Screen()
-		self.center = self.screen.center
-		self.command_area = self.screen.command_area.edit
-
-		urwid.connect_signal(self.command_area, 'change', self.on_change_command_area)
 
 	def run(self):
 		loop = urwid.MainLoop(self.screen, palette, unhandled_input=self.keypress)
@@ -81,24 +77,20 @@ class App(object):
 			if self.printwd:
 				try:
 					with open(self.printwd, 'w') as fp:
-						fp.write(str(self.center.focus.cwd))
+						fp.write(str(self.screen.center.focus.cwd))
 				except (FileNotFoundError, PermissionError):
 					pass
 
 			raise urwid.ExitMainLoop()
 		elif key == 'tab':
 			if self.screen.pile.focus_position == 0:
-				self.center.focus_position ^= 1
+				self.screen.center.focus_position ^= 1
 		elif key in ('f', '/'):
-			self.command_area.set_caption('/')
-			self.screen.pile.focus_position = 1
+			self.screen.command_area.filter()
 		elif key == 'esc':
-			self.screen.pile.focus_position = 0
-			self.command_area.set_caption('')
-			self.command_area.set_edit_text('')
-
-	def on_change_command_area(self, edit, new_edit_text):
-		self.center.focus.filter(new_edit_text)
+			self.screen.command_area.reset()
+		elif key == 'enter':
+			self.screen.command_area.execute()
 
 
 def main():

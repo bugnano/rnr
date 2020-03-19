@@ -21,6 +21,9 @@ import os
 
 import urwid
 
+from debug_print import debug_print
+
+
 class CmdEdit(urwid.Edit):
 	def keypress(self, size, key):
 		if key in ('up', 'down'):
@@ -30,10 +33,48 @@ class CmdEdit(urwid.Edit):
 
 
 class CmdArea(urwid.WidgetWrap):
-	def __init__(self):
+	def __init__(self, screen):
+		self.screen = screen
+
+		self.action = None
+
 		self.edit = CmdEdit()
+		self.edit.screen = screen
+
 		w = urwid.Filler(self.edit)
 		w = urwid.AttrMap(w, 'normal')
 
 		super().__init__(w)
+
+		urwid.connect_signal(self.edit, 'change', self.on_change)
+
+	def on_change(self, edit, new_edit_text):
+		if self.action == 'filter':
+			self.screen.center.focus.filter(new_edit_text)
+			self.screen.center.focus.force_focus()
+
+	def filter(self):
+		self.action = 'filter'
+
+		self.edit.set_caption('/')
+		self.edit.set_edit_text(self.screen.center.focus.file_filter)
+		self.edit.set_edit_pos(len(self.screen.center.focus.file_filter))
+		self.screen.pile.focus_position = 1
+		self.screen.center.focus.force_focus()
+
+	def reset(self):
+		self.edit.set_caption('')
+		self.edit.set_edit_text('')
+		self.screen.pile.focus_position = 0
+		self.screen.center.focus.remove_force_focus()
+
+		self.action = None
+
+	def execute(self):
+		self.action = None
+
+		self.edit.set_caption('')
+		self.edit.set_edit_text('')
+		self.screen.pile.focus_position = 0
+		self.screen.center.focus.remove_force_focus()
 

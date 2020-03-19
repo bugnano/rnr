@@ -185,6 +185,7 @@ class Panel(urwid.WidgetWrap):
 		self.cwd = None
 		self.reverse = False
 		self.file_filter = ''
+		self.forced_focus = None
 		self.files = []
 		self.filtered_files = []
 		self.shown_files = []
@@ -268,6 +269,8 @@ class Panel(urwid.WidgetWrap):
 		self.walker.set_focus(focus)
 
 	def apply_filter(self, filter):
+		self.file_filter = filter
+
 		if filter:
 			self.filtered_files = list(fuzzyfinder(filter, self.shown_files, accessor=lambda x: x['name']))
 		else:
@@ -286,12 +289,32 @@ class Panel(urwid.WidgetWrap):
 
 		self.apply_filter(filter)
 
-		if self.filtered_files:
-			if filter:
+		if filter:
+			try:
 				focus_path = self.filtered_files[0]['file']
-				debug_print(f'focus_path: {focus_path}')
-		else:
-			focus_path = None
+			except IndexError:
+				focus_path = None
 
 		self.update_list_box(focus_path)
+
+	def force_focus(self):
+		self.remove_force_focus()
+
+		self.forced_focus = self.walker.get_focus()[0]
+
+		debug_print(f'panel force_focus: {self.forced_focus}')
+
+		try:
+			self.forced_focus.set_attr_map({None: 'focus'})
+		except AttributeError:
+			pass
+
+	def remove_force_focus(self):
+		debug_print(f'panel remove_force_focus: {self.forced_focus}')
+		try:
+			self.forced_focus.set_attr_map({None: self.forced_focus.model['palette']})
+		except AttributeError:
+			pass
+
+		self.forced_focus = None
 

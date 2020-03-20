@@ -23,11 +23,11 @@ import argparse
 
 import urwid
 
-import panel
-import cmdarea
-import f_area
+from . import panel
+from . import cmdarea
+from . import f_area
 
-from debug_print import (debug_print, set_debug_fp)
+from .debug_print import (debug_print, set_debug_fp)
 
 
 __version__ = '0.0.1'

@@ -21,7 +21,7 @@ import os
 
 import urwid
 
-from debug_print import debug_print
+from .debug_print import debug_print
 
 
 class CmdEdit(urwid.Edit):

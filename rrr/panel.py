@@ -28,7 +28,7 @@ import urwid
 
 from fuzzyfinder import fuzzyfinder
 
-from debug_print import debug_print
+from .debug_print import debug_print
 
 
 def human_readable_size(size):

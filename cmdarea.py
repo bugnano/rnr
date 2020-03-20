@@ -37,6 +37,7 @@ class CmdArea(urwid.WidgetWrap):
 		self.screen = screen
 
 		self.action = None
+		self.leader = ''
 
 		self.edit = CmdEdit()
 		self.edit.screen = screen
@@ -69,6 +70,7 @@ class CmdArea(urwid.WidgetWrap):
 		self.screen.center.focus.remove_force_focus()
 
 		self.action = None
+		self.leader = ''
 
 	def execute(self):
 		self.action = None
@@ -77,4 +79,8 @@ class CmdArea(urwid.WidgetWrap):
 		self.edit.set_edit_text('')
 		self.screen.pile.focus_position = 0
 		self.screen.center.focus.remove_force_focus()
+
+	def set_leader(self, leader):
+		self.leader = leader
+		self.edit.set_caption(self.leader)
 

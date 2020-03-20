@@ -51,9 +51,9 @@ palette = [
 
 class Screen(urwid.WidgetWrap):
 	def __init__(self):
-		left = panel.Panel()
-		right = panel.Panel()
-		self.center = urwid.Columns([left, right])
+		self.left = panel.Panel()
+		self.right = panel.Panel()
+		self.center = urwid.Columns([self.left, self.right])
 		self.command_area = cmdarea.CmdArea(self)
 		bottom = f_area.FArea()
 		self.pile = urwid.Pile([self.center, (1, self.command_area), (1, bottom)])
@@ -67,30 +67,75 @@ class App(object):
 		self.printwd = printwd
 
 		self.screen = Screen()
+		self.leader = ''
 
 	def run(self):
 		loop = urwid.MainLoop(self.screen, palette, unhandled_input=self.keypress)
 		loop.run()
 
 	def keypress(self, key):
-		if key in ('q', 'Q', 'f10'):
-			if self.printwd:
-				try:
-					with open(self.printwd, 'w') as fp:
-						fp.write(str(self.screen.center.focus.cwd))
-				except (FileNotFoundError, PermissionError):
-					pass
-
-			raise urwid.ExitMainLoop()
-		elif key == 'tab':
-			if self.screen.pile.focus_position == 0:
-				self.screen.center.focus_position ^= 1
-		elif key in ('f', '/'):
-			self.screen.command_area.filter()
-		elif key == 'esc':
+		if key == 'esc':
 			self.screen.command_area.reset()
-		elif key == 'enter':
-			self.screen.command_area.execute()
+			self.leader = ''
+		elif self.leader == 's':
+			if key == 'n':
+				self.screen.left.sort('sort_by_name')
+				self.screen.right.sort('sort_by_name')
+			elif key == 'N':
+				self.screen.left.sort('sort_by_name', reverse=True)
+				self.screen.right.sort('sort_by_name', reverse=True)
+			elif key == 'e':
+				self.screen.left.sort('sort_by_extension')
+				self.screen.right.sort('sort_by_extension')
+			elif key == 'E':
+				self.screen.left.sort('sort_by_extension', reverse=True)
+				self.screen.right.sort('sort_by_extension', reverse=True)
+			elif key == 'd':
+				self.screen.left.sort('sort_by_date')
+				self.screen.right.sort('sort_by_date')
+			elif key == 'D':
+				self.screen.left.sort('sort_by_date', reverse=True)
+				self.screen.right.sort('sort_by_date', reverse=True)
+			elif key == 's':
+				self.screen.left.sort('sort_by_size')
+				self.screen.right.sort('sort_by_size')
+			elif key == 'S':
+				self.screen.left.sort('sort_by_size', reverse=True)
+				self.screen.right.sort('sort_by_size', reverse=True)
+
+			self.screen.command_area.reset()
+			self.leader = ''
+		else:
+			if key in ('q', 'Q', 'f10'):
+				if self.printwd:
+					try:
+						with open(self.printwd, 'w') as fp:
+							fp.write(str(self.screen.center.focus.cwd))
+					except (FileNotFoundError, PermissionError):
+						pass
+
+				raise urwid.ExitMainLoop()
+			elif key == 'tab':
+				if self.screen.pile.focus_position == 0:
+					self.screen.center.focus_position ^= 1
+			elif key in ('f', '/'):
+				self.screen.command_area.filter()
+			elif key == 'enter':
+				self.screen.command_area.execute()
+			elif key == 'backspace':
+				self.screen.left.toggle_hidden()
+				self.screen.right.toggle_hidden()
+			elif key == 's':
+				self.leader = 's'
+				self.screen.command_area.set_leader(self.leader)
+			elif key == 'meta i':
+				cwd = self.screen.center.focus.cwd
+
+				if (self.screen.left is not self.screen.center.focus) and (self.screen.left.cwd != cwd):
+					self.screen.left.chdir(cwd)
+
+				if (self.screen.right is not self.screen.center.focus) and (self.screen.right.cwd != cwd):
+					self.screen.right.chdir(cwd)
 
 
 def main():

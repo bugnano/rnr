@@ -183,12 +183,14 @@ class Panel(urwid.WidgetWrap):
 		w = urwid.AttrMap(self.border, 'bg')
 
 		self.cwd = None
+		self.show_hidden = False
+		self.sort_method = 'sort_by_name'
 		self.reverse = False
 		self.file_filter = ''
 		self.forced_focus = None
 		self.files = []
-		self.filtered_files = []
 		self.shown_files = []
+		self.filtered_files = []
 		self.chdir(pathlib.Path.cwd())
 		self.walker.set_focus(0)
 
@@ -247,12 +249,12 @@ class Panel(urwid.WidgetWrap):
 			return
 
 		self.files = files
-		self.shown_files = [x for x in self.files if not x['file'].name.startswith('.')]
+		self.apply_hidden(self.show_hidden)
 		self.apply_filter('')
 		self.update_list_box(old_cwd)
 
 	def update_list_box(self, focus_path):
-		self.filtered_files.sort(key=functools.cmp_to_key(functools.partial(sort_by_name, reverse=self.reverse)), reverse=self.reverse)
+		self.filtered_files.sort(key=functools.cmp_to_key(functools.partial(globals()[self.sort_method], reverse=self.reverse)), reverse=self.reverse)
 
 		focus = 0
 		labels = []
@@ -267,6 +269,14 @@ class Panel(urwid.WidgetWrap):
 
 		self.walker[:] = labels
 		self.walker.set_focus(focus)
+
+	def apply_hidden(self, show_hidden):
+		self.show_hidden = show_hidden
+
+		if show_hidden:
+			self.shown_files = self.files[:]
+		else:
+			self.shown_files = [x for x in self.files if not x['file'].name.startswith('.')]
 
 	def apply_filter(self, filter):
 		self.file_filter = filter
@@ -302,19 +312,38 @@ class Panel(urwid.WidgetWrap):
 
 		self.forced_focus = self.walker.get_focus()[0]
 
-		debug_print(f'panel force_focus: {self.forced_focus}')
-
 		try:
 			self.forced_focus.set_attr_map({None: 'focus'})
 		except AttributeError:
 			pass
 
 	def remove_force_focus(self):
-		debug_print(f'panel remove_force_focus: {self.forced_focus}')
 		try:
 			self.forced_focus.set_attr_map({None: self.forced_focus.model['palette']})
 		except AttributeError:
 			pass
 
 		self.forced_focus = None
+
+	def toggle_hidden(self):
+		self.apply_hidden(not self.show_hidden)
+		self.apply_filter(self.file_filter)
+
+		try:
+			focus_path = self.walker.get_focus()[0].model['file']
+		except AttributeError:
+			focus_path = None
+
+		self.update_list_box(focus_path)
+
+	def sort(self, sort_method, reverse=False):
+		self.sort_method = sort_method
+		self.reverse = reverse
+
+		try:
+			focus_path = self.walker.get_focus()[0].model['file']
+		except AttributeError:
+			focus_path = None
+
+		self.update_list_box(focus_path)
 

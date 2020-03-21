@@ -146,7 +146,7 @@ def main():
 	args = parser.parse_args()
 
 	if args.debug:
-		set_debug_fp(open('rrr.log', 'w', buffering=1))
+		set_debug_fp(open('rnr.log', 'w', buffering=1))
 
 	app = App(args.printwd)
 	app.run()

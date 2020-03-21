@@ -1,22 +1,31 @@
 import setuptools
 
-from rrr import __version__
+from rnr import __version__
 
 with open('README.md', 'r') as fh:
 	long_description = fh.read()
 
+with open('requirements.txt', 'r') as fh:
+	requirements = [x.strip() for x in fh if x.strip()]
+
 setuptools.setup(
-	name='rrr',
+	name='rnr',
 	version=__version__,
 	author='Franco Bugnano',
-	description='The rrr file manager',
+	description="The RNR File Manager (RNR's Not Ranger)",
 	long_description=long_description,
 	long_description_content_type='text/markdown',
-	url='https://github.com/bugnano/rrr',
+	url='https://github.com/bugnano/rnr',
 	packages=setuptools.find_packages(),
+	data_files=[
+		('share/rnr', [
+			'rnr.fish',
+			'rnr.sh',
+		])
+	],
 	entry_points={
 		'console_scripts': [
-			'rrr=rrr:main',
+			'rnr=rnr:main',
 		],
 	},
 	classifiers=[
@@ -34,9 +43,6 @@ setuptools.setup(
 		'Topic :: Utilities',
 	],
 	python_requires='>=3.6',
-	install_requires=[
-		'urwid',
-		'fuzzyfinder',
-	],
+	install_requires=requirements,
 )
 

@@ -21,8 +21,11 @@ import os
 
 import pathlib
 import stat
+import pwd
+import grp
 import datetime
 import functools
+import collections
 
 import urwid
 
@@ -82,9 +85,9 @@ def sort_by_date(a, b, reverse=False):
 		return (1 if reverse else -1)
 	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
 		return (-1 if reverse else 1)
-	elif a['stat'].st_mtime < b['stat'].st_mtime:
+	elif a['lstat'].st_mtime < b['lstat'].st_mtime:
 		return -1
-	elif a['stat'].st_mtime > b['stat'].st_mtime:
+	elif a['lstat'].st_mtime > b['lstat'].st_mtime:
 		return 1
 	else:
 		return sort_by_name(a, b, reverse)
@@ -100,6 +103,16 @@ def sort_by_size(a, b, reverse=False):
 		return 1
 	else:
 		return sort_by_name(a, b, reverse)
+
+
+class Cache(collections.defaultdict):
+	def __missing__(self, key):
+		if self.default_factory is None:
+			raise KeyError(key)
+
+		self[key] = value = self.default_factory(key)
+
+		return value
 
 
 class SelectableColumns(urwid.Columns):
@@ -201,6 +214,9 @@ class Panel(urwid.WidgetWrap):
 		self.cwd = pathlib.Path(cwd)
 		self.border.set_title(str(self.cwd))
 
+		uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
+		gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
+
 		files = []
 		try:
 			for file in self.cwd.iterdir():
@@ -211,9 +227,18 @@ class Panel(urwid.WidgetWrap):
 				}
 
 				try:
-					obj['stat'] = file.stat()
-					if stat.S_ISDIR(obj['stat'].st_mode):
-						if file.is_symlink():
+					lstat = file.lstat()
+					obj['lstat'] = lstat
+
+					if stat.S_ISLNK(lstat.st_mode):
+						st = file.stat()
+					else:
+						st = lstat
+
+					obj['stat'] = st
+
+					if stat.S_ISDIR(st.st_mode):
+						if stat.S_ISLNK(lstat.st_mode):
 							obj['label'] = f'~{file.name}'
 						else:
 							obj['label'] = f'/{file.name}'
@@ -227,18 +252,25 @@ class Panel(urwid.WidgetWrap):
 							obj['length'] = -1
 							obj['size'] = '?'
 					else:
-						if stat.S_ISLNK(obj['stat'].st_mode):
+						if stat.S_ISLNK(lstat.st_mode):
 							obj['label'] = f'@{file.name}'
 							obj['palette'] = 'bg'
-						elif obj['stat'].st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+						elif lstat.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
 							obj['label'] = f'*{file.name}'
 							obj['palette'] = 'executable'
 						else:
 							obj['label'] = f' {file.name}'
 							obj['palette'] = 'bg'
 
-						obj['length'] = obj['stat'].st_size
+						obj['length'] = lstat.st_size
 						obj['size'] = human_readable_size(obj['length'])
+
+					obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid_cache[lstat.st_uid]} {gid_cache[lstat.st_gid]}'
+
+					if stat.S_ISLNK(lstat.st_mode):
+						obj['details'] = f'{obj["details"]} -> {os.readlink(file)}'
+
+					debug_print(f'{obj["label"]}: {obj["details"]}')
 
 					files.append(obj)
 				except (FileNotFoundError, PermissionError):
@@ -259,7 +291,7 @@ class Panel(urwid.WidgetWrap):
 		focus = 0
 		labels = []
 		for file in self.filtered_files:
-			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['label'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['stat'].st_mtime)))], dividechars=1), file['palette'], 'focus')
+			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['label'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['lstat'].st_mtime)))], dividechars=1), file['palette'], 'focus')
 			w.model = file
 
 			if file['file'] == focus_path:

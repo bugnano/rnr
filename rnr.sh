@@ -6,8 +6,8 @@ rnr() {
 		if test -n "$rnr_pwd" -a -d "$rnr_pwd"; then
 			 cd -- "$rnr_pwd"
 		fi
-
-		command rm -f -- "$tempfile"
 	fi
+
+	command rm -f -- "$tempfile"
 }
 

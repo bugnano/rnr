@@ -12,6 +12,7 @@ setuptools.setup(
 	name='rnr',
 	version=__version__,
 	author='Franco Bugnano',
+	author_email="franco@bugnano.it",
 	description="The RNR File Manager (RNR's Not Ranger)",
 	long_description=long_description,
 	long_description_content_type='text/markdown',

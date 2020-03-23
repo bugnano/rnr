@@ -6,8 +6,8 @@ function rnr
 		if test -n $rnr_pwd -a -d $rnr_pwd
 			builtin cd -- $rnr_pwd
 		end
-
-		command rm -f -- $tempfile
 	end
+
+	command rm -f -- $tempfile
 end
 

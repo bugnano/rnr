@@ -58,8 +58,16 @@ class Screen(urwid.WidgetWrap):
 		bottom = f_area.FArea()
 		self.pile = urwid.Pile([self.center, (1, self.command_area), (1, bottom)])
 		self.pile.focus_position = 0
+		self.update_focus()
 
 		super().__init__(self.pile)
+
+	def update_focus(self):
+		for i, e in enumerate(self.center.contents):
+			if i == self.center.focus_position:
+				e[0].set_title_attr('banner')
+			else:
+				e[0].set_title_attr('bg')
 
 
 class App(object):
@@ -118,6 +126,7 @@ class App(object):
 			elif key == 'tab':
 				if self.screen.pile.focus_position == 0:
 					self.screen.center.focus_position ^= 1
+					self.screen.update_focus()
 			elif key in ('f', '/'):
 				self.screen.command_area.filter()
 			elif key == 'enter':

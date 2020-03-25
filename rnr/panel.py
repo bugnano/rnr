@@ -26,6 +26,7 @@ import grp
 import datetime
 import functools
 import collections
+import shutil
 
 import urwid
 
@@ -115,6 +116,32 @@ class Cache(collections.defaultdict):
 		return value
 
 
+class TLineWidget(urwid.WidgetWrap):
+	def __init__(self, title, title_align='center', title_attr=None, lcorner='├', tline='─', rcorner='┤'):
+		self.title_widget = title
+		self.title_attr = urwid.AttrMap(self.title_widget, title_attr)
+		tline_divider = urwid.Divider(tline)
+
+		if title_align == 'left':
+			tline_widgets = [('pack', self.title_attr), tline_divider]
+		else:
+			tline_widgets = [tline_divider, ('pack', self.title_attr)]
+			if title_align == 'center':
+				tline_widgets.append(tline_divider)
+
+		self.tline_widget = urwid.Columns(tline_widgets)
+
+		w = urwid.Columns([(1, urwid.Text(lcorner)), (1, urwid.Text(tline)), self.tline_widget, (1, urwid.Text(tline)), (1, urwid.Text(rcorner))])
+
+		super().__init__(w)
+
+	def set_title(self, text):
+		self.title_widget.set_text(text)
+
+	def set_title_attr(self, attr):
+		self.title_attr.set_attr_map({None: attr})
+
+
 class SelectableColumns(urwid.Columns):
 	def __init__(self, widget_list, dividechars=0, focus_column=None, min_width=1, box_columns=None):
 		super().__init__(widget_list, dividechars, focus_column, min_width, box_columns)
@@ -130,30 +157,76 @@ class VimListBox(urwid.ListBox):
 		if key in ('h', 'left'):
 			self.model.chdir(self.model.cwd.parent)
 		elif key in ('j', 'down'):
+			retval = None
+
 			try:
 				if (self.focus_position + 1) < len(self.model.walker):
-					return super().keypress(size, 'down')
+					retval = super().keypress(size, 'down')
 			except IndexError:
 				pass
+
+			try:
+				self.model.show_details(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				self.model.show_details(None)
+
+			return retval
 		elif key in ('k', 'up'):
+			retval = None
+
 			try:
 				if self.focus_position > 0:
-					return super().keypress(size, 'up')
+					retval = super().keypress(size, 'up')
 			except IndexError:
 				pass
+
+			try:
+				self.model.show_details(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				self.model.show_details(None)
+
+			return retval
 		elif key in ('l', 'right', 'enter'):
 			try:
 				self.model.execute(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				pass
-		elif key == 'g':
-			return super().keypress(size, 'home')
-		elif key == 'G':
-			return super().keypress(size, 'end')
-		elif key == 'ctrl b':
-			return super().keypress(size, 'page up')
-		elif key == 'ctrl f':
-			return super().keypress(size, 'page down')
+		elif key in ('g', 'home'):
+			retval = super().keypress(size, 'home')
+
+			try:
+				self.model.show_details(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				self.model.show_details(None)
+
+			return retval
+		elif key in ('G', 'end'):
+			retval = super().keypress(size, 'end')
+
+			try:
+				self.model.show_details(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				self.model.show_details(None)
+
+			return retval
+		elif key in ('ctrl b', 'page up'):
+			retval = super().keypress(size, 'page up')
+
+			try:
+				self.model.show_details(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				self.model.show_details(None)
+
+			return retval
+		elif key in ('ctrl f', 'page down'):
+			retval = super().keypress(size, 'page down')
+
+			try:
+				self.model.show_details(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				self.model.show_details(None)
+
+			return retval
 		else:
 			return super().keypress(size, key)
 
@@ -183,17 +256,28 @@ TildeLayout = TildeTextLayout()
 
 class Panel(urwid.WidgetWrap):
 	def __init__(self):
+		cwd = pathlib.Path.cwd()
+
+		self.title = TLineWidget(urwid.Text('', layout=TildeLayout), title_align='left', lcorner='┌', rcorner='┐')
+		title = urwid.AttrMap(self.title, 'bg')
+
 		self.walker = urwid.SimpleFocusListWalker([])
 		self.listbox = VimListBox(self.walker)
 		self.listbox.model = self
+		listbox = urwid.LineBox(self.listbox, tline='', bline='')
+		listbox = urwid.AttrMap(listbox, 'bg')
 
-		self.border = urwid.LineBox(self.listbox, '.', 'left')
+		self.details_separator = TLineWidget(urwid.Text('', layout=TildeLayout))
+		details_separator = urwid.AttrMap(self.details_separator, 'bg')
 
-		# WARNING: title_widget and tline_widget are implementation details, and could break in the future
-		self.border.title_widget = urwid.Text(' . ', layout=TildeLayout)
-		self.border.tline_widget.contents[0] = (self.border.title_widget, self.border.tline_widget.options('pack'))
+		self.details = urwid.Text(' ', layout=TildeLayout)
+		details = urwid.LineBox(self.details, tline='', bline='')
+		details = urwid.AttrMap(details, 'bg')
 
-		w = urwid.AttrMap(self.border, 'bg')
+		self.footer = TLineWidget(urwid.Text('', layout=TildeLayout), title_align='right', lcorner='└', rcorner='┘')
+		footer = urwid.AttrMap(self.footer, 'bg')
+
+		w = urwid.Pile([('pack', title), listbox, ('pack', details_separator), ('pack', details), ('pack', footer)])
 
 		self.cwd = None
 		self.show_hidden = False
@@ -204,7 +288,8 @@ class Panel(urwid.WidgetWrap):
 		self.files = []
 		self.shown_files = []
 		self.filtered_files = []
-		self.chdir(pathlib.Path.cwd())
+
+		self.chdir(cwd)
 		self.walker.set_focus(0)
 
 		super().__init__(w)
@@ -212,7 +297,7 @@ class Panel(urwid.WidgetWrap):
 	def chdir(self, cwd):
 		old_cwd = self.cwd
 		self.cwd = pathlib.Path(cwd)
-		self.border.set_title(str(self.cwd))
+		self.title.set_title(f' {str(self.cwd)} ')
 
 		uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
 		gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
@@ -269,21 +354,22 @@ class Panel(urwid.WidgetWrap):
 
 					if stat.S_ISLNK(lstat.st_mode):
 						obj['details'] = f'{obj["details"]} -> {os.readlink(file)}'
-
-					debug_print(f'{obj["label"]}: {obj["details"]}')
+					else:
+						obj['details'] = f'{obj["details"]} {file.name}'
 
 					files.append(obj)
 				except (FileNotFoundError, PermissionError):
 					pass
 		except PermissionError:
 			self.cwd = old_cwd
-			self.border.set_title(str(self.cwd))
+			self.title.set_title(f' {str(self.cwd)} ')
 			return
 
 		self.files = files
 		self.apply_hidden(self.show_hidden)
 		self.apply_filter('')
 		self.update_list_box(old_cwd)
+		self.footer.set_title(f' Free: {human_readable_size(shutil.disk_usage(self.cwd).free)} ')
 
 	def update_list_box(self, focus_path):
 		self.filtered_files.sort(key=functools.cmp_to_key(functools.partial(globals()[self.sort_method], reverse=self.reverse)), reverse=self.reverse)
@@ -301,6 +387,11 @@ class Panel(urwid.WidgetWrap):
 
 		self.walker[:] = labels
 		self.walker.set_focus(focus)
+
+		try:
+			self.show_details(self.filtered_files[focus])
+		except IndexError:
+			self.show_details(None)
 
 	def apply_hidden(self, show_hidden):
 		self.show_hidden = show_hidden
@@ -321,6 +412,15 @@ class Panel(urwid.WidgetWrap):
 	def execute(self, file):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
+
+	def set_title_attr(self, attr):
+		self.title.set_title_attr(attr)
+
+	def show_details(self, file):
+		if file:
+			self.details.set_text(file['details'])
+		else:
+			self.details.set_text(' ')
 
 	def filter(self, filter):
 		if not filter:

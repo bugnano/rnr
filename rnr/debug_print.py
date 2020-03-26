@@ -20,15 +20,15 @@ import sys
 import os
 
 
-debug_fp = None
+debug_fh = None
 
 
 def debug_print(*args, **kwargs):
-	if debug_fp:
-		print(*args, **kwargs, file=debug_fp)
+	if debug_fh:
+		print(*args, **kwargs, file=debug_fh)
 
 
-def set_debug_fp(fp):
-	global debug_fp
-	debug_fp = fp
+def set_debug_fh(fh):
+	global debug_fh
+	debug_fh = fh
 

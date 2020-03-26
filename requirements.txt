@@ -1,3 +1,5 @@
 urwid
 fuzzyfinder
+atomicwrites
+pyxdg
 

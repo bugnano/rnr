@@ -37,14 +37,14 @@ from .debug_print import debug_print
 
 def human_readable_size(size):
 	if size < 1024:
-		return f'{size:d} B'
+		return f'{size:d}B'
 
 	for suffix in ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']:
 		size /= 1024
 		if size < 1024:
 			break
 
-	return f'{size:.{max(4 - len(str(int(size))), 1)}f} {suffix}'
+	return f'{size:.{max(4 - len(str(int(size))), 1)}f}{suffix}'
 
 def format_date(d):
 	d = datetime.datetime.fromtimestamp(d)
@@ -143,8 +143,8 @@ class TLineWidget(urwid.WidgetWrap):
 
 
 class SelectableColumns(urwid.Columns):
-	def __init__(self, widget_list, dividechars=0, focus_column=None, min_width=1, box_columns=None):
-		super().__init__(widget_list, dividechars, focus_column, min_width, box_columns)
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
 
 		self._selectable = True
 
@@ -154,6 +154,9 @@ class SelectableColumns(urwid.Columns):
 
 class VimListBox(urwid.ListBox):
 	def keypress(self, size, key):
+		if self.controller.leader:
+			return key
+
 		if key in ('h', 'left'):
 			self.model.chdir(self.model.cwd.parent)
 		elif key in ('j', 'down'):
@@ -255,8 +258,8 @@ TildeLayout = TildeTextLayout()
 
 
 class Panel(urwid.WidgetWrap):
-	def __init__(self):
-		cwd = pathlib.Path.cwd()
+	def __init__(self, controller):
+		self.controller = controller
 
 		self.title = TLineWidget(urwid.Text('', layout=TildeLayout), title_align='left', lcorner='┌', rcorner='┐')
 		title = urwid.AttrMap(self.title, 'bg')
@@ -264,6 +267,7 @@ class Panel(urwid.WidgetWrap):
 		self.walker = urwid.SimpleFocusListWalker([])
 		self.listbox = VimListBox(self.walker)
 		self.listbox.model = self
+		self.listbox.controller = controller
 		listbox = urwid.LineBox(self.listbox, tline='', bline='')
 		listbox = urwid.AttrMap(listbox, 'bg')
 
@@ -279,7 +283,9 @@ class Panel(urwid.WidgetWrap):
 
 		w = urwid.Pile([('pack', title), listbox, ('pack', details_separator), ('pack', details), ('pack', footer)])
 
-		self.cwd = None
+		cwd = pathlib.Path.cwd()
+		self.old_cwd = cwd
+		self.cwd = cwd
 		self.show_hidden = False
 		self.sort_method = 'sort_by_name'
 		self.reverse = False
@@ -295,80 +301,81 @@ class Panel(urwid.WidgetWrap):
 		super().__init__(w)
 
 	def chdir(self, cwd):
-		old_cwd = self.cwd
-		self.cwd = pathlib.Path(cwd)
-		self.title.set_title(f' {str(self.cwd)} ')
+		cwd = pathlib.Path(cwd)
+		self.title.set_title(f' {str(cwd)} ')
 
 		uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
 		gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
 
 		files = []
 		try:
-			for file in self.cwd.iterdir():
+			for file in cwd.iterdir():
 				obj = {
 					'file': file,
 					'name': file.name.casefold(),
 					'extension': file.suffix.casefold(),
 				}
 
-				try:
-					lstat = file.lstat()
-					obj['lstat'] = lstat
+				lstat = file.lstat()
+				obj['lstat'] = lstat
 
-					if stat.S_ISLNK(lstat.st_mode):
+				if stat.S_ISLNK(lstat.st_mode):
+					try:
 						st = file.stat()
-					else:
-						st = lstat
-
-					obj['stat'] = st
-
-					if stat.S_ISDIR(st.st_mode):
-						if stat.S_ISLNK(lstat.st_mode):
+						if stat.S_ISDIR(st.st_mode):
 							obj['label'] = f'~{file.name}'
+							obj['palette'] = 'dir'
 						else:
-							obj['label'] = f'/{file.name}'
-
-						obj['palette'] = 'dir'
-
-						try:
-							obj['length'] = len(list(file.iterdir()))
-							obj['size'] = str(obj['length'])
-						except (FileNotFoundError, PermissionError):
-							obj['length'] = -1
-							obj['size'] = '?'
-					else:
-						if stat.S_ISLNK(lstat.st_mode):
 							obj['label'] = f'@{file.name}'
 							obj['palette'] = 'bg'
-						elif lstat.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
-							obj['label'] = f'*{file.name}'
-							obj['palette'] = 'executable'
-						else:
-							obj['label'] = f' {file.name}'
-							obj['palette'] = 'bg'
-
-						obj['length'] = lstat.st_size
-						obj['size'] = human_readable_size(obj['length'])
-
-					obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid_cache[lstat.st_uid]} {gid_cache[lstat.st_gid]}'
-
-					if stat.S_ISLNK(lstat.st_mode):
-						obj['details'] = f'{obj["details"]} -> {os.readlink(file)}'
+					except (FileNotFoundError, PermissionError):
+						st = lstat
+						obj['label'] = f'!{file.name}'
+						obj['palette'] = 'broken'
+				else:
+					st = lstat
+					if stat.S_ISDIR(st.st_mode):
+						obj['label'] = f'/{file.name}'
+						obj['palette'] = 'dir'
+					elif lstat.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+						obj['label'] = f'*{file.name}'
+						obj['palette'] = 'executable'
 					else:
-						obj['details'] = f'{obj["details"]} {file.name}'
+						obj['label'] = f' {file.name}'
+						obj['palette'] = 'bg'
 
-					files.append(obj)
-				except (FileNotFoundError, PermissionError):
-					pass
+				obj['stat'] = st
+
+				if stat.S_ISDIR(st.st_mode):
+					try:
+						obj['length'] = len(list(file.iterdir()))
+						obj['size'] = str(obj['length'])
+					except (FileNotFoundError, PermissionError):
+						obj['length'] = -1
+						obj['size'] = '?'
+				else:
+					obj['length'] = lstat.st_size
+					obj['size'] = human_readable_size(obj['length'])
+
+				obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid_cache[lstat.st_uid]} {gid_cache[lstat.st_gid]}'
+
+				if stat.S_ISLNK(lstat.st_mode):
+					obj['details'] = f'{obj["details"]} -> {os.readlink(file)}'
+				else:
+					obj['details'] = f'{obj["details"]} {file.name}'
+
+				files.append(obj)
 		except PermissionError:
-			self.cwd = old_cwd
 			self.title.set_title(f' {str(self.cwd)} ')
 			return
+
+		self.old_cwd = self.cwd
+		self.cwd = cwd
 
 		self.files = files
 		self.apply_hidden(self.show_hidden)
 		self.apply_filter('')
-		self.update_list_box(old_cwd)
+		self.update_list_box(self.old_cwd)
 		self.footer.set_title(f' Free: {human_readable_size(shutil.disk_usage(self.cwd).free)} ')
 
 	def update_list_box(self, focus_path):

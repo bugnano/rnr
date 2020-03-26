@@ -20,14 +20,20 @@ import sys
 import os
 
 import argparse
+import pathlib
 
 import urwid
+
+import xdg.BaseDirectory
+
+CONFIG_DIR = pathlib.Path(xdg.BaseDirectory.save_config_path('rnr'))
 
 from . import panel
 from . import cmdarea
 from . import f_area
 
-from .debug_print import (debug_print, set_debug_fp)
+from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
+from .debug_print import (debug_print, set_debug_fh)
 
 
 __version__ = '0.0.1'
@@ -41,6 +47,7 @@ palette = [
 	('streak', 'black', 'dark red'),
 	('bg', 'light gray', COLOUR_PANEL_BG),
 	('dir', 'white', COLOUR_PANEL_BG),
+	('broken', 'light red', COLOUR_PANEL_BG),
 	('executable', 'light green', COLOUR_PANEL_BG),
 	('focus', 'black', COLOUR_SELECT_BG),
 	('menu', 'black', COLOUR_MENU_BG),
@@ -50,9 +57,9 @@ palette = [
 
 
 class Screen(urwid.WidgetWrap):
-	def __init__(self):
-		self.left = panel.Panel()
-		self.right = panel.Panel()
+	def __init__(self, controller):
+		self.left = panel.Panel(controller)
+		self.right = panel.Panel(controller)
 		self.center = urwid.Columns([self.left, self.right])
 		self.command_area = cmdarea.CmdArea(self)
 		bottom = f_area.FArea()
@@ -74,8 +81,12 @@ class App(object):
 	def __init__(self, printwd):
 		self.printwd = printwd
 
-		self.screen = Screen()
+		self.screen = Screen(self)
 		self.leader = ''
+
+		self.bookmarks = Bookmarks(CONFIG_DIR / 'bookmarks')
+		if 'h' not in self.bookmarks:
+			self.bookmarks['h'] = pathlib.Path.home()
 
 	def run(self):
 		loop = urwid.MainLoop(self.screen, palette, unhandled_input=self.keypress)
@@ -113,12 +124,31 @@ class App(object):
 
 			self.screen.command_area.reset()
 			self.leader = ''
+		elif self.leader == 'm':
+			if key in BOOKMARK_KEYS:
+				self.bookmarks[key] = self.screen.center.focus.cwd
+
+			self.screen.command_area.reset()
+			self.leader = ''
+		elif self.leader in ('`', "'"):
+			if key in ('`', "'"):
+				if self.screen.center.focus.old_cwd != self.screen.center.focus.cwd:
+					self.screen.center.focus.chdir(self.screen.center.focus.old_cwd)
+			elif key in BOOKMARK_KEYS:
+				try:
+					if self.bookmarks[key] != str(self.screen.center.focus.cwd):
+						self.screen.center.focus.chdir(self.bookmarks[key])
+				except KeyError:
+					pass
+
+			self.screen.command_area.reset()
+			self.leader = ''
 		else:
 			if key in ('q', 'Q', 'f10'):
 				if self.printwd:
 					try:
-						with open(self.printwd, 'w') as fp:
-							fp.write(str(self.screen.center.focus.cwd))
+						with open(self.printwd, 'w') as fh:
+							fh.write(str(self.screen.center.focus.cwd))
 					except (FileNotFoundError, PermissionError):
 						pass
 
@@ -135,7 +165,13 @@ class App(object):
 				self.screen.left.toggle_hidden()
 				self.screen.right.toggle_hidden()
 			elif key == 's':
-				self.leader = 's'
+				self.leader = key
+				self.screen.command_area.set_leader(self.leader)
+			elif key == 'm':
+				self.leader = key
+				self.screen.command_area.set_leader(self.leader)
+			elif key in ('`', "'"):
+				self.leader = key
 				self.screen.command_area.set_leader(self.leader)
 			elif key == 'meta i':
 				cwd = self.screen.center.focus.cwd
@@ -155,7 +191,7 @@ def main():
 	args = parser.parse_args()
 
 	if args.debug:
-		set_debug_fp(open('rnr.log', 'w', buffering=1))
+		set_debug_fh(open(pathlib.Path.home() / 'rnr.log', 'w', buffering=1))
 
 	app = App(args.printwd)
 	app.run()

@@ -21,6 +21,8 @@ import os
 
 import argparse
 import pathlib
+import shutil
+import stat
 
 import urwid
 
@@ -28,9 +30,23 @@ import xdg.BaseDirectory
 
 CONFIG_DIR = pathlib.Path(xdg.BaseDirectory.save_config_path('rnr'))
 
+sys.path.insert(0, str(CONFIG_DIR))
+
+try:
+	from config import *
+except ModuleNotFoundError:
+	try:
+		shutil.copy(pathlib.Path(__file__).parent / 'config.py', CONFIG_DIR)
+		print(sys.path)
+		from config import *
+	except (ModuleNotFoundError, FileNotFoundError, PermissionError, IsADirectoryError):
+		from .config import *
+
+sys.path.pop(0)
+
 from . import panel
 from . import cmdarea
-from . import f_area
+from . import buttonbar
 
 from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
 from .debug_print import (debug_print, set_debug_fh)
@@ -38,21 +54,25 @@ from .debug_print import (debug_print, set_debug_fh)
 
 __version__ = '0.0.1'
 
-COLOUR_PANEL_BG = 'dark blue'
-COLOUR_SELECT_BG = 'dark cyan'
-COLOUR_MENU_BG = 'dark cyan'
 
-palette = [
-	('banner', 'black', 'light gray'),
-	('streak', 'black', 'dark red'),
-	('bg', 'light gray', COLOUR_PANEL_BG),
-	('dir', 'white', COLOUR_PANEL_BG),
-	('broken', 'light red', COLOUR_PANEL_BG),
-	('executable', 'light green', COLOUR_PANEL_BG),
-	('focus', 'black', COLOUR_SELECT_BG),
-	('menu', 'black', COLOUR_MENU_BG),
-	('normal', 'default', 'default'),
-	('white_on_black', 'white', 'black'),
+PALETTE = [
+	('default', 'default', 'default'),
+
+	('panel', PANEL_FG, PANEL_BG),
+	('reverse', REVERSE_FG, REVERSE_BG),
+	('selected', SELECTED_FG, SELECTED_BG),
+	('marked', MARKED_FG, PANEL_BG),
+	('markselect', MARKSELECT_FG, SELECTED_BG),
+
+	('directory', DIRECTORY_FG, PANEL_BG),
+	('executable', EXECUTABLE_FG, PANEL_BG),
+	('symlink', SYMLINK_FG, PANEL_BG),
+	('stalelink', STALELINK_FG, PANEL_BG),
+	('device', DEVICE_FG, PANEL_BG),
+	('special', SPECIAL_FG, PANEL_BG),
+	('archive', ARCHIVE_FG, PANEL_BG),
+
+	('hotkey', HOTKEY_FG, HOTKEY_BG),
 ]
 
 
@@ -62,8 +82,13 @@ class Screen(urwid.WidgetWrap):
 		self.right = panel.Panel(controller)
 		self.center = urwid.Columns([self.left, self.right])
 		self.command_area = cmdarea.CmdArea(self)
-		bottom = f_area.FArea()
-		self.pile = urwid.Pile([self.center, (1, self.command_area), (1, bottom)])
+		pile_widgets = [self.center, ('pack', self.command_area)]
+
+		if SHOW_BUTTONBAR:
+			bottom = buttonbar.ButtonBar()
+			pile_widgets.append(('pack', bottom))
+
+		self.pile = urwid.Pile(pile_widgets)
 		self.pile.focus_position = 0
 		self.update_focus()
 
@@ -72,9 +97,9 @@ class Screen(urwid.WidgetWrap):
 	def update_focus(self):
 		for i, e in enumerate(self.center.contents):
 			if i == self.center.focus_position:
-				e[0].set_title_attr('banner')
+				e[0].set_title_attr('reverse')
 			else:
-				e[0].set_title_attr('bg')
+				e[0].set_title_attr('panel')
 
 
 class App(object):
@@ -89,7 +114,7 @@ class App(object):
 			self.bookmarks['h'] = pathlib.Path.home()
 
 	def run(self):
-		loop = urwid.MainLoop(self.screen, palette, unhandled_input=self.keypress)
+		loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=self.keypress)
 		loop.run()
 
 	def keypress(self, key):
@@ -175,6 +200,20 @@ class App(object):
 				self.screen.command_area.set_leader(self.leader)
 			elif key == 'meta i':
 				cwd = self.screen.center.focus.cwd
+
+				if (self.screen.left is not self.screen.center.focus) and (self.screen.left.cwd != cwd):
+					self.screen.left.chdir(cwd)
+
+				if (self.screen.right is not self.screen.center.focus) and (self.screen.right.cwd != cwd):
+					self.screen.right.chdir(cwd)
+			elif key == 'meta o':
+				cwd = self.screen.center.focus.cwd.parent
+				obj = self.screen.center.focus.get_focus()
+				try:
+					if stat.S_ISDIR(obj['stat'].st_mode):
+						cwd = obj['file']
+				except TypeError:
+					pass
 
 				if (self.screen.left is not self.screen.center.focus) and (self.screen.left.cwd != cwd):
 					self.screen.left.chdir(cwd)

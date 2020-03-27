@@ -36,18 +36,16 @@ texts = [
 ]
 
 
-class FArea(urwid.WidgetWrap):
+class ButtonBar(urwid.WidgetWrap):
 	def __init__(self):
 		widgets = []
 		for i, label in enumerate(texts):
 			w = urwid.Text(f'{i + 1}', align='right')
-			w = urwid.Filler(w)
-			w = urwid.AttrMap(w, 'white_on_black')
+			w = urwid.AttrMap(w, 'hotkey')
 			widgets.append((2, w))
 
 			w = urwid.Text(label)
-			w = urwid.Filler(w)
-			w = urwid.AttrMap(w, 'menu')
+			w = urwid.AttrMap(w, 'selected')
 			widgets.append(w)
 
 		w = urwid.Columns(widgets)

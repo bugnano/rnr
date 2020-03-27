@@ -262,24 +262,24 @@ class Panel(urwid.WidgetWrap):
 		self.controller = controller
 
 		self.title = TLineWidget(urwid.Text('', layout=TildeLayout), title_align='left', lcorner='┌', rcorner='┐')
-		title = urwid.AttrMap(self.title, 'bg')
+		title = urwid.AttrMap(self.title, 'panel')
 
 		self.walker = urwid.SimpleFocusListWalker([])
 		self.listbox = VimListBox(self.walker)
 		self.listbox.model = self
 		self.listbox.controller = controller
 		listbox = urwid.LineBox(self.listbox, tline='', bline='')
-		listbox = urwid.AttrMap(listbox, 'bg')
+		listbox = urwid.AttrMap(listbox, 'panel')
 
 		self.details_separator = TLineWidget(urwid.Text('', layout=TildeLayout))
-		details_separator = urwid.AttrMap(self.details_separator, 'bg')
+		details_separator = urwid.AttrMap(self.details_separator, 'panel')
 
 		self.details = urwid.Text(' ', layout=TildeLayout)
 		details = urwid.LineBox(self.details, tline='', bline='')
-		details = urwid.AttrMap(details, 'bg')
+		details = urwid.AttrMap(details, 'panel')
 
 		self.footer = TLineWidget(urwid.Text('', layout=TildeLayout), title_align='right', lcorner='└', rcorner='┘')
-		footer = urwid.AttrMap(self.footer, 'bg')
+		footer = urwid.AttrMap(self.footer, 'panel')
 
 		w = urwid.Pile([('pack', title), listbox, ('pack', details_separator), ('pack', details), ('pack', footer)])
 
@@ -324,25 +324,25 @@ class Panel(urwid.WidgetWrap):
 						st = file.stat()
 						if stat.S_ISDIR(st.st_mode):
 							obj['label'] = f'~{file.name}'
-							obj['palette'] = 'dir'
+							obj['palette'] = 'directory'
 						else:
 							obj['label'] = f'@{file.name}'
-							obj['palette'] = 'bg'
+							obj['palette'] = 'symlink'
 					except (FileNotFoundError, PermissionError):
 						st = lstat
 						obj['label'] = f'!{file.name}'
-						obj['palette'] = 'broken'
+						obj['palette'] = 'stalelink'
 				else:
 					st = lstat
 					if stat.S_ISDIR(st.st_mode):
 						obj['label'] = f'/{file.name}'
-						obj['palette'] = 'dir'
+						obj['palette'] = 'directory'
 					elif lstat.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
 						obj['label'] = f'*{file.name}'
 						obj['palette'] = 'executable'
 					else:
 						obj['label'] = f' {file.name}'
-						obj['palette'] = 'bg'
+						obj['palette'] = 'panel'
 
 				obj['stat'] = st
 
@@ -384,7 +384,7 @@ class Panel(urwid.WidgetWrap):
 		focus = 0
 		labels = []
 		for file in self.filtered_files:
-			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['label'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['lstat'].st_mtime)))], dividechars=1), file['palette'], 'focus')
+			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['label'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['lstat'].st_mtime)))], dividechars=1), file['palette'], 'selected')
 			w.model = file
 
 			if file['file'] == focus_path:
@@ -446,13 +446,19 @@ class Panel(urwid.WidgetWrap):
 
 		self.update_list_box(focus_path)
 
+	def get_focus(self):
+		try:
+			return self.walker.get_focus()[0].model
+		except AttributeError:
+			return None
+
 	def force_focus(self):
 		self.remove_force_focus()
 
 		self.forced_focus = self.walker.get_focus()[0]
 
 		try:
-			self.forced_focus.set_attr_map({None: 'focus'})
+			self.forced_focus.set_attr_map({None: 'selected'})
 		except AttributeError:
 			pass
 

@@ -8,19 +8,19 @@ combines the best features of
 
 ## Features
 
-* Fast directory navigation with Vim-style keys and powerful fuzzy filter
+* Very fast file and directory browser with Vim-style keys and powerful fuzzy filter
 
 ## Goals
 
-* Very fast file and directory browser
 * The most robust file copier in existence (TO DO)
 * Work on remote servers via ssh (TO DO)
 
 ## Non-Goals
 
 * Transfer Speed: In the speed/reliability tradeoff it will choose reliability first.
-* Portability: It is intended for use in Linux, and compatibility to other
-  operating systems is not a goal.
+* Portability: It is intended for use in Linux, and, although it may work on
+  other POSIX-compatible operating systems, errors on non-Linux systems are not
+  considered bugs.
 * Configurability: Apart from choosing a colour scheme, and custom bookmarks,
   it is not intended to be configurable, so no custom commands or keybindings.
   This has the advantage that rnr will work the same everywhere it is installed.
@@ -48,6 +48,7 @@ moment.
 * **q**, **Q**, **F10**: Exit
 * **TAB**: Change active panel
 * **ALT-I**: Set the other panel to the current directory
+* **ALT-O**: Set the other panel to the highlited directory
 
 ### Panel
 
@@ -70,4 +71,8 @@ moment.
 * **sD**: Sort by Date & Time (Reverse)
 * **ss**: Sort by Size
 * **sS**: Sort by Size (Reverse)
+
+* **m`<KEY>`**: Add current directory to the bookmark named `<KEY>`
+* **'`<KEY>`**: Go to the bookmark named `<KEY>`
+* **''**: Go to the previous directory
 

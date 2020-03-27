@@ -42,8 +42,7 @@ class CmdArea(urwid.WidgetWrap):
 		self.edit = CmdEdit()
 		self.edit.screen = screen
 
-		w = urwid.Filler(self.edit)
-		w = urwid.AttrMap(w, 'normal')
+		w = urwid.AttrMap(self.edit, 'default')
 
 		super().__init__(w)
 

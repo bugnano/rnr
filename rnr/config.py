@@ -1,13 +1,18 @@
+import os
 
-SHOW_BUTTONBAR = True
+OPENER = 'xdg-open'
+PAGER = os.environ.get('PAGER', 'less')
+EDITOR = os.environ.get('VISUAL', 'vi')
 
 # Theme
+SHOW_BUTTONBAR = True
+
 PANEL_FG = 'light gray'
 PANEL_BG = 'dark blue'
 REVERSE_FG = 'black'
 REVERSE_BG = 'light gray'
 SELECTED_FG = 'black'
-SELECTED_BG = 'dark cyan'
+SELECTED_BG = ('dark cyan' if os.geteuid() else 'dark red')
 
 MARKED_FG = 'yellow'
 MARKSELECT_FG = 'yellow'

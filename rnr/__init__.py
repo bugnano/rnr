@@ -45,7 +45,7 @@ except ModuleNotFoundError:
 sys.path.pop(0)
 
 from . import panel
-from . import cmdarea
+from . import cmdbar
 from . import buttonbar
 
 from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
@@ -81,8 +81,8 @@ class Screen(urwid.WidgetWrap):
 		self.left = panel.Panel(controller)
 		self.right = panel.Panel(controller)
 		self.center = urwid.Columns([self.left, self.right])
-		self.command_area = cmdarea.CmdArea(self)
-		pile_widgets = [self.center, ('pack', self.command_area)]
+		self.command_bar = cmdbar.CmdBar(self)
+		pile_widgets = [self.center, ('pack', self.command_bar)]
 
 		if SHOW_BUTTONBAR:
 			bottom = buttonbar.ButtonBar()
@@ -106,6 +106,10 @@ class App(object):
 	def __init__(self, printwd):
 		self.printwd = printwd
 
+		self.opener = OPENER
+		self.pager = PAGER
+		self.editor = EDITOR
+
 		self.screen = Screen(self)
 		self.leader = ''
 
@@ -114,12 +118,12 @@ class App(object):
 			self.bookmarks['h'] = pathlib.Path.home()
 
 	def run(self):
-		loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=self.keypress)
-		loop.run()
+		self.loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=self.keypress)
+		self.loop.run()
 
 	def keypress(self, key):
 		if key == 'esc':
-			self.screen.command_area.reset()
+			self.screen.command_bar.reset()
 			self.leader = ''
 		elif self.leader == 's':
 			if key == 'n':
@@ -147,13 +151,13 @@ class App(object):
 				self.screen.left.sort('sort_by_size', reverse=True)
 				self.screen.right.sort('sort_by_size', reverse=True)
 
-			self.screen.command_area.reset()
+			self.screen.command_bar.reset()
 			self.leader = ''
 		elif self.leader == 'm':
 			if key in BOOKMARK_KEYS:
 				self.bookmarks[key] = self.screen.center.focus.cwd
 
-			self.screen.command_area.reset()
+			self.screen.command_bar.reset()
 			self.leader = ''
 		elif self.leader in ('`', "'"):
 			if key in ('`', "'"):
@@ -166,7 +170,7 @@ class App(object):
 				except KeyError:
 					pass
 
-			self.screen.command_area.reset()
+			self.screen.command_bar.reset()
 			self.leader = ''
 		else:
 			if key in ('q', 'Q', 'f10'):
@@ -183,21 +187,21 @@ class App(object):
 					self.screen.center.focus_position ^= 1
 					self.screen.update_focus()
 			elif key in ('f', '/'):
-				self.screen.command_area.filter()
+				self.screen.command_bar.filter()
 			elif key == 'enter':
-				self.screen.command_area.execute()
+				self.screen.command_bar.execute()
 			elif key == 'backspace':
 				self.screen.left.toggle_hidden()
 				self.screen.right.toggle_hidden()
 			elif key == 's':
 				self.leader = key
-				self.screen.command_area.set_leader(self.leader)
+				self.screen.command_bar.set_leader(self.leader)
 			elif key == 'm':
 				self.leader = key
-				self.screen.command_area.set_leader(self.leader)
+				self.screen.command_bar.set_leader(self.leader)
 			elif key in ('`', "'"):
 				self.leader = key
-				self.screen.command_area.set_leader(self.leader)
+				self.screen.command_bar.set_leader(self.leader)
 			elif key == 'meta i':
 				cwd = self.screen.center.focus.cwd
 
@@ -220,7 +224,6 @@ class App(object):
 
 				if (self.screen.right is not self.screen.center.focus) and (self.screen.right.cwd != cwd):
 					self.screen.right.chdir(cwd)
-
 
 def main():
 	parser = argparse.ArgumentParser()

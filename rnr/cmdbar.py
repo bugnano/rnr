@@ -32,7 +32,7 @@ class CmdEdit(urwid.Edit):
 			return super().keypress(size, key)
 
 
-class CmdArea(urwid.WidgetWrap):
+class CmdBar(urwid.WidgetWrap):
 	def __init__(self, screen):
 		self.screen = screen
 

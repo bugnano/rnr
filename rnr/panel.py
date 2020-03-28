@@ -27,6 +27,8 @@ import datetime
 import functools
 import collections
 import shutil
+import subprocess
+import signal
 
 import urwid
 
@@ -230,6 +232,18 @@ class VimListBox(urwid.ListBox):
 				self.model.show_details(None)
 
 			return retval
+		elif key == 'ctrl r':
+			self.model.reload()
+		elif key == 'f3':
+			try:
+				self.model.view(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				pass
+		elif key == 'f4':
+			try:
+				self.model.edit(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				pass
 		else:
 			return super().keypress(size, key)
 
@@ -301,8 +315,21 @@ class Panel(urwid.WidgetWrap):
 		super().__init__(w)
 
 	def chdir(self, cwd):
-		cwd = pathlib.Path(cwd)
 		self.title.set_title(f' {str(cwd)} ')
+		if self._reload(cwd, self.cwd):
+			self.old_cwd = self.cwd
+			self.cwd = cwd
+		else:
+			self.title.set_title(f' {str(self.cwd)} ')
+
+	def reload(self):
+		try:
+			self._reload(self.cwd, self.walker.get_focus()[0].model['file'])
+		except AttributeError:
+			self._reload(self.cwd, None)
+
+	def _reload(self, cwd, focus_path):
+		cwd = pathlib.Path(cwd)
 
 		uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
 		gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
@@ -337,6 +364,18 @@ class Panel(urwid.WidgetWrap):
 					if stat.S_ISDIR(st.st_mode):
 						obj['label'] = f'/{file.name}'
 						obj['palette'] = 'directory'
+					elif stat.S_ISCHR(lstat.st_mode):
+						obj['label'] = f'-{file.name}'
+						obj['palette'] = 'device'
+					elif stat.S_ISBLK(lstat.st_mode):
+						obj['label'] = f'+{file.name}'
+						obj['palette'] = 'device'
+					elif stat.S_ISFIFO(lstat.st_mode):
+						obj['label'] = f'|{file.name}'
+						obj['palette'] = 'special'
+					elif stat.S_ISSOCK(lstat.st_mode):
+						obj['label'] = f'={file.name}'
+						obj['palette'] = 'special'
 					elif lstat.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
 						obj['label'] = f'*{file.name}'
 						obj['palette'] = 'executable'
@@ -348,14 +387,21 @@ class Panel(urwid.WidgetWrap):
 
 				if stat.S_ISDIR(st.st_mode):
 					try:
-						obj['length'] = len(list(file.iterdir()))
-						obj['size'] = str(obj['length'])
+						length =len(list(file.iterdir()))
+						obj['length'] = (length,)
+						obj['size'] = str(length)
 					except (FileNotFoundError, PermissionError):
-						obj['length'] = -1
+						obj['length'] = (-1,)
 						obj['size'] = '?'
+				elif stat.S_ISCHR(lstat.st_mode) or stat.S_ISBLK(lstat.st_mode):
+						major = os.major(lstat.st_rdev)
+						minor = os.minor(lstat.st_rdev)
+						obj['length'] = (major, minor)
+						obj['size'] = f'{major},{minor}'
 				else:
-					obj['length'] = lstat.st_size
-					obj['size'] = human_readable_size(obj['length'])
+					length = lstat.st_size
+					obj['length'] = (length,)
+					obj['size'] = human_readable_size(length)
 
 				obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid_cache[lstat.st_uid]} {gid_cache[lstat.st_gid]}'
 
@@ -366,17 +412,15 @@ class Panel(urwid.WidgetWrap):
 
 				files.append(obj)
 		except PermissionError:
-			self.title.set_title(f' {str(self.cwd)} ')
-			return
-
-		self.old_cwd = self.cwd
-		self.cwd = cwd
+			return False
 
 		self.files = files
 		self.apply_hidden(self.show_hidden)
 		self.apply_filter('')
-		self.update_list_box(self.old_cwd)
-		self.footer.set_title(f' Free: {human_readable_size(shutil.disk_usage(self.cwd).free)} ')
+		self.update_list_box(focus_path)
+		self.footer.set_title(f' Free: {human_readable_size(shutil.disk_usage(cwd).free)} ')
+
+		return True
 
 	def update_list_box(self, focus_path):
 		self.filtered_files.sort(key=functools.cmp_to_key(functools.partial(globals()[self.sort_method], reverse=self.reverse)), reverse=self.reverse)
@@ -419,6 +463,29 @@ class Panel(urwid.WidgetWrap):
 	def execute(self, file):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
+		else:
+			self.controller.loop.stop()
+			subprocess.run([self.controller.opener, file['file'].name], cwd=self.cwd)
+			self.controller.loop.start()
+			os.kill(os.getpid(), signal.SIGWINCH)
+			self.reload()
+
+	def view(self, file):
+		if stat.S_ISDIR(file['stat'].st_mode):
+			self.chdir(file['file'])
+		else:
+			self.controller.loop.stop()
+			subprocess.run([self.controller.pager, file['file'].name], cwd=self.cwd)
+			self.controller.loop.start()
+			os.kill(os.getpid(), signal.SIGWINCH)
+			self.reload()
+
+	def edit(self, file):
+		self.controller.loop.stop()
+		subprocess.run([self.controller.editor, file['file'].name], cwd=self.cwd)
+		self.controller.loop.start()
+		os.kill(os.getpid(), signal.SIGWINCH)
+		self.reload()
 
 	def set_title_attr(self, attr):
 		self.title.set_title_attr(attr)

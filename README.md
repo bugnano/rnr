@@ -46,16 +46,19 @@ moment.
 
 * **ESC**: Return to command mode (like Vim)
 * **q**, **Q**, **F10**: Exit
+* **CTRL-R**: Reload current panel
 * **TAB**: Change active panel
 * **ALT-I**: Set the other panel to the current directory
 * **ALT-O**: Set the other panel to the highlited directory
+* **F3**: View file with the selected pager / Enter directory
+* **F4**: Edit file/directory with the selected editor
 
 ### Panel
 
 * **h**, **LEFT**: Go to the parent directory
 * **j**, **DOWN**: Go to the next list element
 * **k**, **UP**: Go to the previous list element
-* **l**, **RIGHT**, **ENTER**: Enter directory / Open file with xdg-open
+* **l**, **RIGHT**, **ENTER**: Enter directory / Open file with the selected opener
 * **g**, **HOME**: Go to the top of the list
 * **G**, **END**: Go to the bottom of the list
 * **CTRL-B**, **PAGE UP**: Go up a page in the list

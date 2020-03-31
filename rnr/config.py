@@ -28,3 +28,7 @@ ARCHIVE_FG = 'light magenta'
 HOTKEY_FG = 'white'
 HOTKEY_BG = 'black'
 
+ERROR_FG = 'white'
+ERROR_BG = 'dark red'
+ERROR_TITLE_FG = 'yellow'
+

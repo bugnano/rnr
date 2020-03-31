@@ -18,6 +18,7 @@
 
 import sys
 import os
+import pathlib
 
 import urwid
 
@@ -28,19 +29,22 @@ class CmdEdit(urwid.Edit):
 	def keypress(self, size, key):
 		if key in ('up', 'down'):
 			pass
+		elif key == 'backspace':
+			if self.edit_pos:
+				return super().keypress(size, key)
 		else:
 			return super().keypress(size, key)
 
 
 class CmdBar(urwid.WidgetWrap):
-	def __init__(self, screen):
+	def __init__(self, controller, screen):
+		self.controller = controller
 		self.screen = screen
 
 		self.action = None
 		self.leader = ''
 
 		self.edit = CmdEdit()
-		self.edit.screen = screen
 
 		w = urwid.AttrMap(self.edit, 'default')
 
@@ -53,15 +57,6 @@ class CmdBar(urwid.WidgetWrap):
 			self.screen.center.focus.filter(new_edit_text)
 			self.screen.center.focus.force_focus()
 
-	def filter(self):
-		self.action = 'filter'
-
-		self.edit.set_caption('/')
-		self.edit.set_edit_text(self.screen.center.focus.file_filter)
-		self.edit.set_edit_pos(len(self.screen.center.focus.file_filter))
-		self.screen.pile.focus_position = 1
-		self.screen.center.focus.force_focus()
-
 	def reset(self):
 		self.edit.set_caption('')
 		self.edit.set_edit_text('')
@@ -72,7 +67,22 @@ class CmdBar(urwid.WidgetWrap):
 		self.leader = ''
 
 	def execute(self):
+		if self.action == 'mkdir':
+			new_dir = pathlib.Path(self.edit.get_edit_text())
+			if new_dir.is_absolute():
+				new_dir = new_dir.resolve()
+			else:
+				new_dir = (self.screen.center.focus.cwd / new_dir).resolve()
+
+			try:
+				os.makedirs(new_dir, exist_ok=True)
+			except (PermissionError, FileExistsError) as e:
+				self.controller.error(f'{e.strerror} ({e.errno})')
+
+			self.controller.reload()
+
 		self.action = None
+		self.leader = ''
 
 		self.edit.set_caption('')
 		self.edit.set_edit_text('')
@@ -82,4 +92,18 @@ class CmdBar(urwid.WidgetWrap):
 	def set_leader(self, leader):
 		self.leader = leader
 		self.edit.set_caption(self.leader)
+
+	def prepare_action(self, action, caption, text):
+		self.action = action
+		self.edit.set_caption(caption)
+		self.edit.set_edit_text(text)
+		self.edit.set_edit_pos(len(text))
+		self.screen.pile.focus_position = 1
+		self.screen.center.focus.force_focus()
+
+	def filter(self):
+		self.prepare_action('filter', '/', self.screen.center.focus.file_filter)
+
+	def mkdir(self):
+		self.prepare_action('mkdir', 'mkdir: ', '')
 

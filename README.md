@@ -46,12 +46,13 @@ moment.
 
 * **ESC**: Return to command mode (like Vim)
 * **q**, **Q**, **F10**: Exit
-* **CTRL-R**: Reload current panel
+* **CTRL-R**: Reload panels
 * **TAB**: Change active panel
 * **ALT-I**: Set the other panel to the current directory
 * **ALT-O**: Set the other panel to the highlited directory
 * **F3**: View file with the selected pager / Enter directory
 * **F4**: Edit file/directory with the selected editor
+* **F7**: Make directory
 
 ### Panel
 

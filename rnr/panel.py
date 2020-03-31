@@ -34,6 +34,7 @@ import urwid
 
 from fuzzyfinder import fuzzyfinder
 
+from .tline_widget import TLineWidget
 from .debug_print import debug_print
 
 
@@ -116,32 +117,6 @@ class Cache(collections.defaultdict):
 		self[key] = value = self.default_factory(key)
 
 		return value
-
-
-class TLineWidget(urwid.WidgetWrap):
-	def __init__(self, title, title_align='center', title_attr=None, lcorner='├', tline='─', rcorner='┤'):
-		self.title_widget = title
-		self.title_attr = urwid.AttrMap(self.title_widget, title_attr)
-		tline_divider = urwid.Divider(tline)
-
-		if title_align == 'left':
-			tline_widgets = [('pack', self.title_attr), tline_divider]
-		else:
-			tline_widgets = [tline_divider, ('pack', self.title_attr)]
-			if title_align == 'center':
-				tline_widgets.append(tline_divider)
-
-		self.tline_widget = urwid.Columns(tline_widgets)
-
-		w = urwid.Columns([(1, urwid.Text(lcorner)), (1, urwid.Text(tline)), self.tline_widget, (1, urwid.Text(tline)), (1, urwid.Text(rcorner))])
-
-		super().__init__(w)
-
-	def set_title(self, text):
-		self.title_widget.set_text(text)
-
-	def set_title_attr(self, attr):
-		self.title_attr.set_attr_map({None: attr})
 
 
 class SelectableColumns(urwid.Columns):
@@ -232,8 +207,6 @@ class VimListBox(urwid.ListBox):
 				self.model.show_details(None)
 
 			return retval
-		elif key == 'ctrl r':
-			self.model.reload()
 		elif key == 'f3':
 			try:
 				self.model.view(self.model.walker.get_focus()[0].model)
@@ -468,7 +441,7 @@ class Panel(urwid.WidgetWrap):
 			subprocess.run([self.controller.opener, file['file'].name], cwd=self.cwd)
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
-			self.reload()
+			self.controller.reload()
 
 	def view(self, file):
 		if stat.S_ISDIR(file['stat'].st_mode):
@@ -478,14 +451,14 @@ class Panel(urwid.WidgetWrap):
 			subprocess.run([self.controller.pager, file['file'].name], cwd=self.cwd)
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
-			self.reload()
+			self.controller.reload()
 
 	def edit(self, file):
 		self.controller.loop.stop()
 		subprocess.run([self.controller.editor, file['file'].name], cwd=self.cwd)
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
-		self.reload()
+		self.controller.reload()
 
 	def set_title_attr(self, attr):
 		self.title.set_title_attr(attr)

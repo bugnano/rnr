@@ -31,6 +31,8 @@ import xdg.BaseDirectory
 CONFIG_DIR = pathlib.Path(xdg.BaseDirectory.save_config_path('rnr'))
 
 sys.path.insert(0, str(CONFIG_DIR))
+_dont_write_bytecode = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
 
 try:
 	from config import *
@@ -42,6 +44,8 @@ except ModuleNotFoundError:
 	except (ModuleNotFoundError, FileNotFoundError, PermissionError, IsADirectoryError):
 		from .config import *
 
+sys.dont_write_bytecode = _dont_write_bytecode
+del _dont_write_bytecode
 sys.path.pop(0)
 
 from . import panel
@@ -49,6 +53,7 @@ from . import cmdbar
 from . import buttonbar
 
 from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
+from .dlg_error import (DlgError)
 from .debug_print import (debug_print, set_debug_fh)
 
 
@@ -73,6 +78,9 @@ PALETTE = [
 	('archive', ARCHIVE_FG, PANEL_BG),
 
 	('hotkey', HOTKEY_FG, HOTKEY_BG),
+
+	('error', ERROR_FG, ERROR_BG),
+	('error_title', ERROR_TITLE_FG, ERROR_BG),
 ]
 
 
@@ -81,12 +89,14 @@ class Screen(urwid.WidgetWrap):
 		self.left = panel.Panel(controller)
 		self.right = panel.Panel(controller)
 		self.center = urwid.Columns([self.left, self.right])
-		self.command_bar = cmdbar.CmdBar(self)
-		pile_widgets = [self.center, ('pack', self.command_bar)]
+		self.command_bar = cmdbar.CmdBar(controller, self)
+		w = urwid.Filler(self.command_bar)
+		pile_widgets = [self.center, (1, w)]
 
 		if SHOW_BUTTONBAR:
 			bottom = buttonbar.ButtonBar()
-			pile_widgets.append(('pack', bottom))
+			w = urwid.Filler(bottom)
+			pile_widgets.append((1, w))
 
 		self.pile = urwid.Pile(pile_widgets)
 		self.pile.focus_position = 0
@@ -224,6 +234,21 @@ class App(object):
 
 				if (self.screen.right is not self.screen.center.focus) and (self.screen.right.cwd != cwd):
 					self.screen.right.chdir(cwd)
+			elif key == 'ctrl r':
+				self.reload()
+			elif key == 'f7':
+				self.screen.command_bar.mkdir()
+
+	def reload(self):
+		self.screen.left.reload()
+		self.screen.right.reload()
+
+	def error(self, e):
+		self.screen.pile.contents[0] = (urwid.Overlay(DlgError(self, e), self.screen.center,
+			'center', ('relative', 50),
+			'middle', 'pack',
+		), self.screen.pile.options())
+
 
 def main():
 	parser = argparse.ArgumentParser()

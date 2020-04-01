@@ -295,13 +295,21 @@ class Panel(urwid.WidgetWrap):
 		else:
 			self.title.set_title(f' {str(self.cwd)} ')
 
-	def reload(self):
+	def reload(self, focus_path=None, preserve_pos=False):
 		try:
-			self._reload(self.cwd, self.walker.get_focus()[0].model['file'])
+			obj, focus_position = self.walker.get_focus()
+			if focus_path is None:
+				focus_path = obj.model['file']
 		except AttributeError:
-			self._reload(self.cwd, None)
+			focus_path = None
+			focus_position = 0
 
-	def _reload(self, cwd, focus_path):
+		if not preserve_pos:
+			focus_position = 0
+
+		self._reload(self.cwd, focus_path, focus_position)
+
+	def _reload(self, cwd, focus_path, focus_position=0):
 		cwd = pathlib.Path(cwd)
 
 		uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
@@ -390,15 +398,15 @@ class Panel(urwid.WidgetWrap):
 		self.files = files
 		self.apply_hidden(self.show_hidden)
 		self.apply_filter('')
-		self.update_list_box(focus_path)
+		self.update_list_box(focus_path, focus_position)
 		self.footer.set_title(f' Free: {human_readable_size(shutil.disk_usage(cwd).free)} ')
 
 		return True
 
-	def update_list_box(self, focus_path):
+	def update_list_box(self, focus_path, focus_position=0):
 		self.filtered_files.sort(key=functools.cmp_to_key(functools.partial(globals()[self.sort_method], reverse=self.reverse)), reverse=self.reverse)
 
-		focus = 0
+		focus = -1
 		labels = []
 		for file in self.filtered_files:
 			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['label'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['lstat'].st_mtime)))], dividechars=1), file['palette'], 'selected')
@@ -410,6 +418,10 @@ class Panel(urwid.WidgetWrap):
 			labels.append(w)
 
 		self.walker[:] = labels
+
+		if focus < 0:
+			focus = min(focus_position, len(labels) - 1)
+
 		self.walker.set_focus(focus)
 
 		try:
@@ -441,7 +453,7 @@ class Panel(urwid.WidgetWrap):
 			subprocess.run([self.controller.opener, file['file'].name], cwd=self.cwd)
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
-			self.controller.reload()
+			self.controller.reload(preserve_pos=True)
 
 	def view(self, file):
 		if stat.S_ISDIR(file['stat'].st_mode):
@@ -451,14 +463,14 @@ class Panel(urwid.WidgetWrap):
 			subprocess.run([self.controller.pager, file['file'].name], cwd=self.cwd)
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
-			self.controller.reload()
+			self.controller.reload(preserve_pos=True)
 
 	def edit(self, file):
 		self.controller.loop.stop()
 		subprocess.run([self.controller.editor, file['file'].name], cwd=self.cwd)
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
-		self.controller.reload()
+		self.controller.reload(preserve_pos=True)
 
 	def set_title_attr(self, attr):
 		self.title.set_title_attr(attr)
@@ -472,7 +484,7 @@ class Panel(urwid.WidgetWrap):
 	def filter(self, filter):
 		if not filter:
 			try:
-				focus_path = self.walker.get_focus()[0].model['file']
+				focus_path = self.get_focus()['file']
 			except AttributeError:
 				focus_path = None
 
@@ -515,7 +527,7 @@ class Panel(urwid.WidgetWrap):
 		self.apply_filter(self.file_filter)
 
 		try:
-			focus_path = self.walker.get_focus()[0].model['file']
+			focus_path = self.get_focus()['file']
 		except AttributeError:
 			focus_path = None
 
@@ -526,7 +538,7 @@ class Panel(urwid.WidgetWrap):
 		self.reverse = reverse
 
 		try:
-			focus_path = self.walker.get_focus()[0].model['file']
+			focus_path = self.get_focus()['file']
 		except AttributeError:
 			focus_path = None
 

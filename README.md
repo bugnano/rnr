@@ -80,3 +80,8 @@ moment.
 * **'`<KEY>`**: Go to the bookmark named `<KEY>`
 * **''**: Go to the previous directory
 
+* **r**, **c**: Rename file (replace)
+* **i**, **I**: Rename file (insert)
+* **a**: Rename file (append before extension)
+* **A**: Rename file (append after extension)
+

@@ -26,7 +26,7 @@ setuptools.setup(
 	],
 	entry_points={
 		'console_scripts': [
-			'rnr=rnr:main',
+			'rnr=rnr.__main__:main',
 		],
 	},
 	classifiers=[

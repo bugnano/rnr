@@ -43,6 +43,7 @@ class CmdBar(urwid.WidgetWrap):
 
 		self.action = None
 		self.leader = ''
+		self.file = None
 
 		self.edit = CmdEdit()
 
@@ -70,16 +71,30 @@ class CmdBar(urwid.WidgetWrap):
 		if self.action == 'mkdir':
 			new_dir = pathlib.Path(self.edit.get_edit_text())
 			if new_dir.is_absolute():
-				new_dir = new_dir.resolve()
+				new_dir = pathlib.Path(os.path.normpath(new_dir))
 			else:
-				new_dir = (self.screen.center.focus.cwd / new_dir).resolve()
+				new_dir = pathlib.Path(os.path.normpath(self.file / new_dir))
 
 			try:
 				os.makedirs(new_dir, exist_ok=True)
+				self.controller.reload()
 			except (PermissionError, FileExistsError) as e:
 				self.controller.error(f'{e.strerror} ({e.errno})')
+		if self.action == 'rename':
+			new_name = pathlib.Path(self.edit.get_edit_text())
+			if new_name.is_absolute():
+				new_name = pathlib.Path(os.path.normpath(new_name))
+			else:
+				new_name = pathlib.Path(os.path.normpath(self.file.parent / new_name))
 
-			self.controller.reload()
+			try:
+				if new_name.exists():
+					self.controller.error(f'File already exists')
+				else:
+					self.file.rename(new_name)
+					self.controller.reload(new_name, old_focus=self.file, preserve_pos=True)
+			except OSError as e:
+				self.controller.error(f'{e.strerror} ({e.errno})')
 
 		self.action = None
 		self.leader = ''
@@ -93,17 +108,36 @@ class CmdBar(urwid.WidgetWrap):
 		self.leader = leader
 		self.edit.set_caption(self.leader)
 
-	def prepare_action(self, action, caption, text):
+	def prepare_action(self, action, caption, text, edit_pos=-1):
 		self.action = action
 		self.edit.set_caption(caption)
 		self.edit.set_edit_text(text)
-		self.edit.set_edit_pos(len(text))
+		if edit_pos < 0:
+			self.edit.set_edit_pos(len(text))
+		else:
+			self.edit.set_edit_pos(edit_pos)
 		self.screen.pile.focus_position = 1
 		self.screen.center.focus.force_focus()
 
 	def filter(self):
 		self.prepare_action('filter', '/', self.screen.center.focus.file_filter)
 
-	def mkdir(self):
+	def mkdir(self, cwd):
+		self.file = cwd
 		self.prepare_action('mkdir', 'mkdir: ', '')
+
+	def rename(self, file, mode):
+		self.file = file
+		text = file.name
+		if mode == 'replace':
+			text = ''
+			edit_pos = -1
+		elif mode == 'insert':
+			edit_pos = 0
+		elif mode == 'append_before':
+			edit_pos = len(file.stem)
+		else:
+			edit_pos = -1
+
+		self.prepare_action('rename', 'rename: ', text, edit_pos)
 

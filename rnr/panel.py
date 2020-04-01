@@ -485,7 +485,7 @@ class Panel(urwid.WidgetWrap):
 		if not filter:
 			try:
 				focus_path = self.get_focus()['file']
-			except AttributeError:
+			except TypeError:
 				focus_path = None
 
 		self.apply_filter(filter)
@@ -528,7 +528,7 @@ class Panel(urwid.WidgetWrap):
 
 		try:
 			focus_path = self.get_focus()['file']
-		except AttributeError:
+		except TypeError:
 			focus_path = None
 
 		self.update_list_box(focus_path)
@@ -539,7 +539,7 @@ class Panel(urwid.WidgetWrap):
 
 		try:
 			focus_path = self.get_focus()['file']
-		except AttributeError:
+		except TypeError:
 			focus_path = None
 
 		self.update_list_box(focus_path)

@@ -69,32 +69,9 @@ class CmdBar(urwid.WidgetWrap):
 
 	def execute(self):
 		if self.action == 'mkdir':
-			new_dir = pathlib.Path(self.edit.get_edit_text())
-			if new_dir.is_absolute():
-				new_dir = pathlib.Path(os.path.normpath(new_dir))
-			else:
-				new_dir = pathlib.Path(os.path.normpath(self.file / new_dir))
-
-			try:
-				os.makedirs(new_dir, exist_ok=True)
-				self.controller.reload()
-			except (PermissionError, FileExistsError) as e:
-				self.controller.error(f'{e.strerror} ({e.errno})')
+			self.do_mkdir()
 		if self.action == 'rename':
-			new_name = pathlib.Path(self.edit.get_edit_text())
-			if new_name.is_absolute():
-				new_name = pathlib.Path(os.path.normpath(new_name))
-			else:
-				new_name = pathlib.Path(os.path.normpath(self.file.parent / new_name))
-
-			try:
-				if new_name.exists():
-					self.controller.error(f'File already exists')
-				else:
-					self.file.rename(new_name)
-					self.controller.reload(new_name, old_focus=self.file, preserve_pos=True)
-			except OSError as e:
-				self.controller.error(f'{e.strerror} ({e.errno})')
+			self.do_rename()
 
 		self.action = None
 		self.leader = ''
@@ -126,6 +103,19 @@ class CmdBar(urwid.WidgetWrap):
 		self.file = cwd
 		self.prepare_action('mkdir', 'mkdir: ', '')
 
+	def do_mkdir(self):
+		new_dir = pathlib.Path(self.edit.get_edit_text())
+		if new_dir.is_absolute():
+			new_dir = pathlib.Path(os.path.normpath(new_dir))
+		else:
+			new_dir = pathlib.Path(os.path.normpath(self.file / new_dir))
+
+		try:
+			os.makedirs(new_dir, exist_ok=True)
+			self.controller.reload()
+		except (PermissionError, FileExistsError) as e:
+			self.controller.error(f'{e.strerror} ({e.errno})')
+
 	def rename(self, file, mode):
 		self.file = file
 		text = file.name
@@ -140,4 +130,30 @@ class CmdBar(urwid.WidgetWrap):
 			edit_pos = -1
 
 		self.prepare_action('rename', 'rename: ', text, edit_pos)
+
+	def do_rename(self):
+		new_name = pathlib.Path(self.edit.get_edit_text())
+		if new_name.is_absolute():
+			new_name = pathlib.Path(os.path.normpath(new_name))
+		else:
+			new_name = pathlib.Path(os.path.normpath(self.file.parent / new_name))
+
+		try:
+			if new_name.exists():
+				if new_name.is_dir():
+					if new_name.resolve() == self.file.parent.resolve():
+						return
+
+					new_name = new_name / self.file.name
+				else:
+					if (new_name.parent.resolve() / new_name.name) == (self.file.parent.resolve() / self.file.name):
+						return
+
+					self.controller.error(f'File already exists')
+					return
+
+			self.file.rename(new_name)
+			self.controller.reload(new_name, old_focus=self.file, preserve_pos=True)
+		except OSError as e:
+			self.controller.error(f'{e.strerror} ({e.errno})')
 

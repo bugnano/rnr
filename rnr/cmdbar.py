@@ -70,8 +70,12 @@ class CmdBar(urwid.WidgetWrap):
 	def execute(self):
 		if self.action == 'mkdir':
 			self.do_mkdir()
-		if self.action == 'rename':
+		elif self.action == 'rename':
 			self.do_rename()
+		elif self.action == 'tag_glob':
+			self.do_tag_glob()
+		elif self.action == 'untag_glob':
+			self.do_untag_glob()
 
 		self.action = None
 		self.leader = ''
@@ -153,7 +157,19 @@ class CmdBar(urwid.WidgetWrap):
 					return
 
 			self.file.rename(new_name)
-			self.controller.reload(new_name, old_focus=self.file, preserve_pos=True)
+			self.controller.reload(new_name, old_focus=self.file)
 		except OSError as e:
 			self.controller.error(f'{e.strerror} ({e.errno})')
+
+	def tag_glob(self):
+		self.prepare_action('tag_glob', 'tag: ', '*')
+
+	def do_tag_glob(self):
+		self.screen.center.focus.tag_glob(self.edit.get_edit_text())
+
+	def untag_glob(self):
+		self.prepare_action('untag_glob', 'untag: ', '*')
+
+	def do_untag_glob(self):
+		self.screen.center.focus.untag_glob(self.edit.get_edit_text())
 

@@ -2,7 +2,7 @@ import os
 
 OPENER = 'xdg-open'
 PAGER = os.environ.get('PAGER', 'less')
-EDITOR = os.environ.get('VISUAL', 'vi')
+EDITOR = os.environ.get('VISUAL', os.environ.get('EDITOR', 'vi'))
 
 # Theme
 SHOW_BUTTONBAR = True
@@ -18,6 +18,7 @@ MARKED_FG = 'yellow'
 MARKSELECT_FG = 'yellow'
 
 DIRECTORY_FG = 'white'
+DIR_SYMLINK_FG = 'white'
 EXECUTABLE_FG = 'light green'
 SYMLINK_FG = 'light gray'
 STALELINK_FG = 'light red'

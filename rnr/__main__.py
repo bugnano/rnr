@@ -50,16 +50,14 @@ sys.dont_write_bytecode = _dont_write_bytecode
 del _dont_write_bytecode
 sys.path.pop(0)
 
-from . import panel
-from . import cmdbar
-from . import buttonbar
+from . import __version__
 
+from .panel import Panel
+from .cmdbar import CmdBar
+from .buttonbar import ButtonBar
 from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
 from .dlg_error import (DlgError)
 from .debug_print import (debug_print, set_debug_fh)
-
-
-__version__ = '0.0.1'
 
 
 PALETTE = [
@@ -72,6 +70,7 @@ PALETTE = [
 	('markselect', MARKSELECT_FG, SELECTED_BG),
 
 	('directory', DIRECTORY_FG, PANEL_BG),
+	('dir_symlink', DIR_SYMLINK_FG, PANEL_BG),
 	('executable', EXECUTABLE_FG, PANEL_BG),
 	('symlink', SYMLINK_FG, PANEL_BG),
 	('stalelink', STALELINK_FG, PANEL_BG),
@@ -88,15 +87,15 @@ PALETTE = [
 
 class Screen(urwid.WidgetWrap):
 	def __init__(self, controller):
-		self.left = panel.Panel(controller)
-		self.right = panel.Panel(controller)
+		self.left = Panel(controller)
+		self.right = Panel(controller)
 		self.center = urwid.Columns([self.left, self.right])
-		self.command_bar = cmdbar.CmdBar(controller, self)
+		self.command_bar = CmdBar(controller, self)
 		w = urwid.Filler(self.command_bar)
 		pile_widgets = [self.center, (1, w)]
 
 		if SHOW_BUTTONBAR:
-			bottom = buttonbar.ButtonBar()
+			bottom = ButtonBar()
 			w = urwid.Filler(bottom)
 			pile_widgets.append((1, w))
 
@@ -178,9 +177,15 @@ class App(object):
 			elif key in BOOKMARK_KEYS:
 				try:
 					if self.bookmarks[key] != str(self.screen.center.focus.cwd):
-						self.screen.center.focus.chdir(self.bookmarks[key])
+						self.screen.center.focus.chdir(pathlib.Path(self.bookmarks[key]))
 				except KeyError:
 					pass
+
+			self.screen.command_bar.reset()
+			self.leader = ''
+		elif self.leader == 'u':
+			if key == 'v':
+				self.screen.center.focus.untag_all()
 
 			self.screen.command_bar.reset()
 			self.leader = ''
@@ -212,6 +217,9 @@ class App(object):
 				self.leader = key
 				self.screen.command_bar.set_leader(self.leader)
 			elif key in ('`', "'"):
+				self.leader = key
+				self.screen.command_bar.set_leader(self.leader)
+			elif key == 'u':
 				self.leader = key
 				self.screen.command_bar.set_leader(self.leader)
 			elif key == 'meta i':
@@ -264,8 +272,12 @@ class App(object):
 					self.screen.command_bar.rename(obj['file'], mode='append_after')
 				except TypeError:
 					pass
+			elif key == '+':
+				self.screen.command_bar.tag_glob()
+			elif key in ('-', '\\'):
+				self.screen.command_bar.untag_glob()
 
-	def reload(self, focus_path=None, old_focus=None, preserve_pos=False):
+	def reload(self, focus_path=None, old_focus=None):
 		if old_focus is None:
 			left_path = focus_path
 			right_path = focus_path
@@ -286,14 +298,17 @@ class App(object):
 			except TypeError:
 				pass
 
-		self.screen.left.reload(left_path, preserve_pos)
-		self.screen.right.reload(right_path, preserve_pos)
+		self.screen.left.reload(left_path)
+		self.screen.right.reload(right_path)
 
 	def error(self, e):
 		self.screen.pile.contents[0] = (urwid.Overlay(DlgError(self, e), self.screen.center,
 			'center', len(e) + 6,
 			'middle', 'pack',
 		), self.screen.pile.options())
+
+	def close_dialog(self):
+		self.screen.pile.contents[0] = (self.screen.center, self.screen.pile.options())
 
 
 def main():

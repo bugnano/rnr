@@ -217,6 +217,12 @@ class VimListBox(urwid.ListBox):
 				self.model.edit(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				pass
+		elif key in ('insert', ' '):
+			if self.model.tag_toggle():
+				if (self.focus_position + 1) < len(self.model.walker):
+					super().keypress(size, 'down')
+		elif key in ('*', 'v'):
+			self.model.tag_toggle_all()
 		else:
 			return super().keypress(size, key)
 
@@ -258,7 +264,7 @@ class Panel(urwid.WidgetWrap):
 		listbox = urwid.LineBox(self.listbox, tline='', bline='')
 		listbox = urwid.AttrMap(listbox, 'panel')
 
-		self.details_separator = TLineWidget(urwid.Text('', layout=TildeLayout))
+		self.details_separator = TLineWidget(urwid.Text('─', layout=TildeLayout))
 		details_separator = urwid.AttrMap(self.details_separator, 'panel')
 
 		self.details = urwid.Text(' ', layout=TildeLayout)
@@ -281,6 +287,7 @@ class Panel(urwid.WidgetWrap):
 		self.files = []
 		self.shown_files = []
 		self.filtered_files = []
+		self.tagged_files = set()
 
 		self.chdir(cwd)
 		self.walker.set_focus(0)
@@ -289,22 +296,23 @@ class Panel(urwid.WidgetWrap):
 
 	def chdir(self, cwd):
 		self.title.set_title(f' {str(cwd)} ')
+		self.file_filter = ''
+		self.tagged_files.clear()
+		self.update_tagged_count()
+
 		if self._reload(cwd, self.cwd):
 			self.old_cwd = self.cwd
 			self.cwd = cwd
 		else:
 			self.title.set_title(f' {str(self.cwd)} ')
 
-	def reload(self, focus_path=None, preserve_pos=False):
+	def reload(self, focus_path=None):
 		try:
 			obj, focus_position = self.walker.get_focus()
 			if focus_path is None:
 				focus_path = obj.model['file']
 		except AttributeError:
 			focus_path = None
-			focus_position = 0
-
-		if not preserve_pos:
 			focus_position = 0
 
 		self._reload(self.cwd, focus_path, focus_position)
@@ -332,7 +340,7 @@ class Panel(urwid.WidgetWrap):
 						st = file.stat()
 						if stat.S_ISDIR(st.st_mode):
 							obj['label'] = f'~{file.name}'
-							obj['palette'] = 'directory'
+							obj['palette'] = 'dir_symlink'
 						else:
 							obj['label'] = f'@{file.name}'
 							obj['palette'] = 'symlink'
@@ -397,7 +405,7 @@ class Panel(urwid.WidgetWrap):
 
 		self.files = files
 		self.apply_hidden(self.show_hidden)
-		self.apply_filter('')
+		self.apply_filter(self.file_filter)
 		self.update_list_box(focus_path, focus_position)
 		self.footer.set_title(f' Free: {human_readable_size(shutil.disk_usage(cwd).free)} ')
 
@@ -409,7 +417,14 @@ class Panel(urwid.WidgetWrap):
 		focus = -1
 		labels = []
 		for file in self.filtered_files:
-			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['label'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['lstat'].st_mtime)))], dividechars=1), file['palette'], 'selected')
+			if file['file'] in self.tagged_files:
+				attr_map = 'marked'
+				focus_map = 'markselect'
+			else:
+				attr_map = file['palette']
+				focus_map = 'selected'
+
+			w = urwid.AttrMap(SelectableColumns([urwid.Text(file['label'], layout=TildeLayout), ('pack', urwid.Text(file['size'])), ('pack', urwid.Text(format_date(file['lstat'].st_mtime)))], dividechars=1), attr_map, focus_map)
 			w.model = file
 
 			if file['file'] == focus_path:
@@ -453,7 +468,7 @@ class Panel(urwid.WidgetWrap):
 			subprocess.run([self.controller.opener, file['file'].name], cwd=self.cwd)
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
-			self.controller.reload(preserve_pos=True)
+			self.controller.reload()
 
 	def view(self, file):
 		if stat.S_ISDIR(file['stat'].st_mode):
@@ -463,14 +478,14 @@ class Panel(urwid.WidgetWrap):
 			subprocess.run([self.controller.pager, file['file'].name], cwd=self.cwd)
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
-			self.controller.reload(preserve_pos=True)
+			self.controller.reload()
 
 	def edit(self, file):
 		self.controller.loop.stop()
 		subprocess.run([self.controller.editor, file['file'].name], cwd=self.cwd)
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
-		self.controller.reload(preserve_pos=True)
+		self.controller.reload()
 
 	def set_title_attr(self, attr):
 		self.title.set_title_attr(attr)
@@ -510,13 +525,27 @@ class Panel(urwid.WidgetWrap):
 		self.forced_focus = self.walker.get_focus()[0]
 
 		try:
-			self.forced_focus.set_attr_map({None: 'selected'})
+			file = self.forced_focus.model
+
+			if file['file'] in self.tagged_files:
+				attr_map = 'markselect'
+			else:
+				attr_map = 'selected'
+
+			self.forced_focus.set_attr_map({None: attr_map})
 		except AttributeError:
 			pass
 
 	def remove_force_focus(self):
 		try:
-			self.forced_focus.set_attr_map({None: self.forced_focus.model['palette']})
+			file = self.forced_focus.model
+
+			if file['file'] in self.tagged_files:
+				attr_map = 'marked'
+			else:
+				attr_map = file['palette']
+
+			self.forced_focus.set_attr_map({None: attr_map})
 		except AttributeError:
 			pass
 
@@ -543,4 +572,85 @@ class Panel(urwid.WidgetWrap):
 			focus_path = None
 
 		self.update_list_box(focus_path)
+
+	def update_tagged_count(self):
+		if self.tagged_files:
+			self.details_separator.set_title(f' {len(self.tagged_files)} File(s) Tagged ')
+			self.details_separator.set_title_attr('marked')
+		else:
+			self.details_separator.set_title('─')
+			self.details_separator.set_title_attr('panel')
+
+	def tag_toggle(self):
+		try:
+			line = self.walker.get_focus()[0]
+			file = line.model['file']
+		except AttributeError:
+			return False
+
+		if file in self.tagged_files:
+			self.tagged_files.discard(file)
+			line.set_attr_map({None: line.model['palette']})
+			line.set_focus_map({None: 'selected'})
+		else:
+			self.tagged_files.add(file)
+			line.set_attr_map({None: 'marked'})
+			line.set_focus_map({None: 'markselect'})
+
+		self.update_tagged_count()
+
+		return True
+
+	def tag_toggle_all(self):
+		for line in self.walker:
+			file = line.model['file']
+
+			if file in self.tagged_files:
+				self.tagged_files.discard(file)
+				line.set_attr_map({None: line.model['palette']})
+				line.set_focus_map({None: 'selected'})
+			else:
+				self.tagged_files.add(file)
+				line.set_attr_map({None: 'marked'})
+				line.set_focus_map({None: 'markselect'})
+
+		self.update_tagged_count()
+
+	def tag_glob(self, pattern):
+		try:
+			for line in self.walker:
+				file = line.model['file']
+
+				if file.match(pattern):
+					self.tagged_files.add(file)
+					line.set_attr_map({None: 'marked'})
+					line.set_focus_map({None: 'markselect'})
+		except ValueError:
+			pass
+
+		self.update_tagged_count()
+
+	def untag_glob(self, pattern):
+		try:
+			for line in self.walker:
+				file = line.model['file']
+
+				if file.match(pattern):
+					self.tagged_files.discard(file)
+					line.set_attr_map({None: line.model['palette']})
+					line.set_focus_map({None: 'selected'})
+		except ValueError:
+			pass
+
+		self.update_tagged_count()
+
+	def untag_all(self):
+		for line in self.walker:
+			file = line.model['file']
+
+			self.tagged_files.discard(file)
+			line.set_attr_map({None: line.model['palette']})
+			line.set_focus_map({None: 'selected'})
+
+		self.update_tagged_count()
 

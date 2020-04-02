@@ -39,5 +39,5 @@ class DlgError(urwid.WidgetWrap):
 		super().__init__(w)
 
 	def keypress(self, size, key):
-		self.controller.screen.pile.contents[0] = (self.controller.screen.center, self.controller.screen.pile.options())
+		self.controller.close_dialog()
 

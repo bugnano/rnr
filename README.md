@@ -44,7 +44,7 @@ moment.
 
 ### General
 
-* **ESC**: Return to command mode (like Vim)
+* **ESC**: Return to normal mode (like Vim)
 * **q**, **Q**, **F10**: Exit
 * **CTRL-R**: Reload panels
 * **TAB**: Change active panel
@@ -67,6 +67,8 @@ moment.
 * **f**, **/**: Filter list (fuzzy finder like [fzf](https://github.com/junegunn/fzf))
 * **BACKSPACE**: Show/Hide hidden files
 
+#### Sorting
+
 * **sn**: Sort by Name
 * **sN**: Sort by Name (Reverse)
 * **se**: Sort by Extension
@@ -76,12 +78,24 @@ moment.
 * **ss**: Sort by Size
 * **sS**: Sort by Size (Reverse)
 
+#### Bookmarks
+
 * **m`<KEY>`**: Add current directory to the bookmark named `<KEY>`
 * **'`<KEY>`**: Go to the bookmark named `<KEY>`
-* **''**: Go to the previous directory
+* **''**: Go to the previous directory (2 times ', not ")
+
+#### Rename
 
 * **r**, **c**: Rename file (replace)
 * **i**, **I**: Rename file (insert)
 * **a**: Rename file (append before extension)
 * **A**: Rename file (append after extension)
+
+#### Select (Tag) files
+
+* **INSERT**, **SPACE**: Toggle tag on selected file
+* __*__, **v**: Toggle tag on all files
+* **+**: Tag files that match the shell wildcard pattern
+* **-**, **\\**: Untag files that match the shell wildcard pattern
+* **uv**: Untag all files
 

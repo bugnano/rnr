@@ -22,22 +22,25 @@ import os
 import urwid
 
 
-class DlgError(urwid.WidgetWrap):
-	def __init__(self, controller, e):
-		self.controller = controller
+class TildeTextLayout(urwid.TextLayout):
+	def layout(self, text, width, align, wrap):
+		if len(text) <= width:
+			return [[(len(text), 0, text.encode('utf-8'))]]
 
-		w = urwid.Filler(urwid.Text(f' {e} ', align='center'), top=1, bottom=1)
-		w = urwid.LineBox(w, 'Error', title_attr='error_title')
-		w = urwid.Padding(w, left=1, right=1)
-		w = urwid.Pile([
-			(1, urwid.Filler(urwid.Text(' '))),
-			(5, w),
-			(1, urwid.Filler(urwid.Text(' '))),
-		])
-		w = urwid.AttrMap(w, 'error')
+		full_len = max(width - 1, 2)
+		half = int(full_len / 2)
+		left = half
+		right = full_len - left
 
-		super().__init__(w)
+		return [[(width, 0, f'{text[:left]}~{text[-right:]}'[:width].encode('utf-8'))]]
 
-	def keypress(self, size, key):
-		self.controller.close_dialog()
+	def pack(self, maxcol, layout):
+		maxwidth = 0
+		for l in layout:
+			for line in l:
+				maxwidth = max(line[0], maxwidth)
+
+		return min(maxwidth, maxcol)
+
+TildeLayout = TildeTextLayout()
 

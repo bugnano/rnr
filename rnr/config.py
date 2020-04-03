@@ -32,4 +32,6 @@ HOTKEY_BG = 'black'
 ERROR_FG = 'white'
 ERROR_BG = 'dark red'
 ERROR_TITLE_FG = 'yellow'
+ERROR_FOCUS_FG = 'black'
+ERROR_FOCUS_BG = 'light gray'
 

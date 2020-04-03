@@ -20,15 +20,16 @@ import sys
 import os
 
 import argparse
-import pathlib
 import shutil
 import stat
+
+from pathlib import Path
 
 import urwid
 
 import xdg.BaseDirectory
 
-CONFIG_DIR = pathlib.Path(xdg.BaseDirectory.save_config_path('rnr'))
+CONFIG_DIR = Path(xdg.BaseDirectory.save_config_path('rnr'))
 
 sys.path.insert(0, str(CONFIG_DIR))
 _dont_write_bytecode = sys.dont_write_bytecode
@@ -40,7 +41,7 @@ try:
 	from config import *
 except ModuleNotFoundError:
 	try:
-		shutil.copy(pathlib.Path(__file__).parent / 'config.py', CONFIG_DIR)
+		shutil.copy(Path(__file__).parent / 'config.py', CONFIG_DIR)
 		print(sys.path)
 		from config import *
 	except (ModuleNotFoundError, FileNotFoundError, PermissionError, IsADirectoryError):
@@ -57,6 +58,7 @@ from .cmdbar import CmdBar
 from .buttonbar import ButtonBar
 from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
 from .dlg_error import (DlgError)
+from .dlg_question import (DlgQuestion)
 from .debug_print import (debug_print, set_debug_fh)
 
 
@@ -82,6 +84,7 @@ PALETTE = [
 
 	('error', ERROR_FG, ERROR_BG),
 	('error_title', ERROR_TITLE_FG, ERROR_BG),
+	('error_focus', ERROR_FOCUS_FG, ERROR_FOCUS_BG),
 ]
 
 
@@ -126,7 +129,7 @@ class App(object):
 
 		self.bookmarks = Bookmarks(CONFIG_DIR / 'bookmarks')
 		if 'h' not in self.bookmarks:
-			self.bookmarks['h'] = pathlib.Path.home()
+			self.bookmarks['h'] = Path.home()
 
 	def run(self):
 		self.loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=self.keypress)
@@ -177,7 +180,7 @@ class App(object):
 			elif key in BOOKMARK_KEYS:
 				try:
 					if self.bookmarks[key] != str(self.screen.center.focus.cwd):
-						self.screen.center.focus.chdir(pathlib.Path(self.bookmarks[key]))
+						self.screen.center.focus.chdir(Path(self.bookmarks[key]))
 				except KeyError:
 					pass
 
@@ -276,6 +279,20 @@ class App(object):
 				self.screen.command_bar.tag_glob()
 			elif key in ('-', '\\'):
 				self.screen.command_bar.untag_glob()
+			elif key == 'f8':
+				tagged_files = self.screen.center.focus.get_tagged_files()
+				if tagged_files:
+					if len(tagged_files) == 1:
+						question = f'Delete {tagged_files[0].name}?'
+					else:
+						question = f'Delete {len(tagged_files)} files/directories?'
+
+					self.screen.center.focus.force_focus()
+					self.screen.pile.contents[0] = (urwid.Overlay(DlgQuestion(self, title='Delete', question=question,
+						on_yes=lambda x: self.on_delete(tagged_files), on_no=lambda x: self.close_dialog()), self.screen.center,
+						'center', max(len(question) + 6, 21),
+						'middle', 'pack',
+					), self.screen.pile.options())
 
 	def reload(self, focus_path=None, old_focus=None):
 		if old_focus is None:
@@ -302,6 +319,7 @@ class App(object):
 		self.screen.right.reload(right_path)
 
 	def error(self, e):
+		self.screen.center.focus.force_focus()
 		self.screen.pile.contents[0] = (urwid.Overlay(DlgError(self, e), self.screen.center,
 			'center', len(e) + 6,
 			'middle', 'pack',
@@ -309,6 +327,10 @@ class App(object):
 
 	def close_dialog(self):
 		self.screen.pile.contents[0] = (self.screen.center, self.screen.pile.options())
+		self.screen.center.focus.remove_force_focus()
+
+	def on_delete(self, files):
+		self.close_dialog()
 
 
 def main():
@@ -319,7 +341,7 @@ def main():
 	args = parser.parse_args()
 
 	if args.debug:
-		set_debug_fh(open(pathlib.Path.home() / 'rnr.log', 'w', buffering=1))
+		set_debug_fh(open(Path.home() / 'rnr.log', 'w', buffering=1))
 
 	app = App(args.printwd)
 	app.run()

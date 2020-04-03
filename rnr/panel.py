@@ -19,7 +19,6 @@
 import sys
 import os
 
-import pathlib
 import stat
 import pwd
 import grp
@@ -30,10 +29,13 @@ import shutil
 import subprocess
 import signal
 
+from pathlib import Path
+
 import urwid
 
 from fuzzyfinder import fuzzyfinder
 
+from .tilde_layout import TildeLayout
 from .tline_widget import TLineWidget
 from .debug_print import debug_print
 
@@ -227,29 +229,6 @@ class VimListBox(urwid.ListBox):
 			return super().keypress(size, key)
 
 
-class TildeTextLayout(urwid.TextLayout):
-	def layout(self, text, width, align, wrap):
-		if len(text) <= width:
-			return [[(len(text), 0, text.encode('utf-8'))]]
-
-		full_len = max(width - 1, 2)
-		half = int(full_len / 2)
-		left = half
-		right = full_len - left
-
-		return [[(width, 0, f'{text[:left]}~{text[-right:]}'[:width].encode('utf-8'))]]
-
-	def pack(self, maxcol, layout):
-		maxwidth = 0
-		for l in layout:
-			for line in l:
-				maxwidth = max(line[0], maxwidth)
-
-		return min(maxwidth, maxcol)
-
-TildeLayout = TildeTextLayout()
-
-
 class Panel(urwid.WidgetWrap):
 	def __init__(self, controller):
 		self.controller = controller
@@ -276,7 +255,7 @@ class Panel(urwid.WidgetWrap):
 
 		w = urwid.Pile([('pack', title), listbox, ('pack', details_separator), ('pack', details), ('pack', footer)])
 
-		cwd = pathlib.Path.cwd()
+		cwd = Path.cwd()
 		self.old_cwd = cwd
 		self.cwd = cwd
 		self.show_hidden = False
@@ -318,7 +297,7 @@ class Panel(urwid.WidgetWrap):
 		self._reload(self.cwd, focus_path, focus_position)
 
 	def _reload(self, cwd, focus_path, focus_position=0):
-		cwd = pathlib.Path(cwd)
+		cwd = Path(cwd)
 
 		uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
 		gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
@@ -653,4 +632,18 @@ class Panel(urwid.WidgetWrap):
 			line.set_focus_map({None: 'selected'})
 
 		self.update_tagged_count()
+
+	def get_tagged_files(self):
+		if self.tagged_files:
+			return sorted(self.tagged_files)
+		else:
+			try:
+				file = self.get_focus()['file']
+			except TypeError:
+				file = None
+
+			if file:
+				return [file]
+			else:
+				return []
 

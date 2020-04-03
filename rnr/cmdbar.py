@@ -18,7 +18,8 @@
 
 import sys
 import os
-import pathlib
+
+from pathlib import Path
 
 import urwid
 
@@ -108,11 +109,11 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('mkdir', 'mkdir: ', '')
 
 	def do_mkdir(self):
-		new_dir = pathlib.Path(self.edit.get_edit_text())
+		new_dir = Path(self.edit.get_edit_text())
 		if new_dir.is_absolute():
-			new_dir = pathlib.Path(os.path.normpath(new_dir))
+			new_dir = Path(os.path.normpath(new_dir))
 		else:
-			new_dir = pathlib.Path(os.path.normpath(self.file / new_dir))
+			new_dir = Path(os.path.normpath(self.file / new_dir))
 
 		try:
 			os.makedirs(new_dir, exist_ok=True)
@@ -136,11 +137,11 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('rename', 'rename: ', text, edit_pos)
 
 	def do_rename(self):
-		new_name = pathlib.Path(self.edit.get_edit_text())
+		new_name = Path(self.edit.get_edit_text())
 		if new_name.is_absolute():
-			new_name = pathlib.Path(os.path.normpath(new_name))
+			new_name = Path(os.path.normpath(new_name))
 		else:
-			new_name = pathlib.Path(os.path.normpath(self.file.parent / new_name))
+			new_name = Path(os.path.normpath(self.file.parent / new_name))
 
 		try:
 			if new_name.exists():

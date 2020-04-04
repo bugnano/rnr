@@ -35,3 +35,9 @@ ERROR_TITLE_FG = 'yellow'
 ERROR_FOCUS_FG = 'black'
 ERROR_FOCUS_BG = 'light gray'
 
+DIALOG_FG = 'black'
+DIALOG_BG = 'light gray'
+DIALOG_TITLE_FG = 'dark blue'
+DIALOG_FOCUS_FG = 'black'
+DIALOG_FOCUS_BG = 'dark cyan'
+

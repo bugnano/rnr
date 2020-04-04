@@ -19,6 +19,8 @@
 import sys
 import os
 
+from pprint import pprint
+
 
 debug_fh = None
 
@@ -27,6 +29,9 @@ def debug_print(*args, **kwargs):
 	if debug_fh:
 		print(*args, **kwargs, file=debug_fh)
 
+def debug_pprint(*args, **kwargs):
+	if debug_fh:
+		pprint(*args, **kwargs, stream=debug_fh)
 
 def set_debug_fh(fh):
 	global debug_fh

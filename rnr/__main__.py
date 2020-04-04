@@ -24,6 +24,8 @@ import shutil
 import stat
 
 from pathlib import Path
+from queue import Queue
+from threading import Thread
 
 import urwid
 
@@ -57,8 +59,10 @@ from .panel import Panel
 from .cmdbar import CmdBar
 from .buttonbar import ButtonBar
 from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
-from .dlg_error import (DlgError)
-from .dlg_question import (DlgQuestion)
+from .dlg_error import DlgError
+from .dlg_question import DlgQuestion
+from .dlg_dirscan import DlgDirscan
+from .dirscan import dirscan
 from .debug_print import (debug_print, set_debug_fh)
 
 
@@ -66,10 +70,10 @@ PALETTE = [
 	('default', 'default', 'default'),
 
 	('panel', PANEL_FG, PANEL_BG),
-	('reverse', REVERSE_FG, REVERSE_BG),
-	('selected', SELECTED_FG, SELECTED_BG),
-	('marked', MARKED_FG, PANEL_BG),
-	('markselect', MARKSELECT_FG, SELECTED_BG),
+	('reverse', REVERSE_FG, REVERSE_BG, 'standout'),
+	('selected', SELECTED_FG, SELECTED_BG, 'standout'),
+	('marked', MARKED_FG, PANEL_BG, 'default,bold'),
+	('markselect', MARKSELECT_FG, SELECTED_BG, 'standout,bold'),
 
 	('directory', DIRECTORY_FG, PANEL_BG),
 	('dir_symlink', DIR_SYMLINK_FG, PANEL_BG),
@@ -82,9 +86,13 @@ PALETTE = [
 
 	('hotkey', HOTKEY_FG, HOTKEY_BG),
 
-	('error', ERROR_FG, ERROR_BG),
-	('error_title', ERROR_TITLE_FG, ERROR_BG),
-	('error_focus', ERROR_FOCUS_FG, ERROR_FOCUS_BG),
+	('error', ERROR_FG, ERROR_BG, 'standout'),
+	('error_title', ERROR_TITLE_FG, ERROR_BG, 'standout'),
+	('error_focus', ERROR_FOCUS_FG, ERROR_FOCUS_BG, 'standout'),
+
+	('dialog', DIALOG_FG, DIALOG_BG, 'standout'),
+	('dialog_title', DIALOG_TITLE_FG, DIALOG_BG, 'standout'),
+	('dialog_focus', DIALOG_FOCUS_FG, DIALOG_FOCUS_BG, 'standout'),
 ]
 
 
@@ -117,8 +125,9 @@ class Screen(urwid.WidgetWrap):
 
 
 class App(object):
-	def __init__(self, printwd):
+	def __init__(self, printwd, nocolor):
 		self.printwd = printwd
+		self.nocolor = nocolor
 
 		self.opener = OPENER
 		self.pager = PAGER
@@ -133,6 +142,10 @@ class App(object):
 
 	def run(self):
 		self.loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=self.keypress)
+
+		if self.nocolor:
+			self.loop.screen.set_terminal_properties(colors=1)
+
 		self.loop.run()
 
 	def keypress(self, key):
@@ -289,7 +302,7 @@ class App(object):
 
 					self.screen.center.focus.force_focus()
 					self.screen.pile.contents[0] = (urwid.Overlay(DlgQuestion(self, title='Delete', question=question,
-						on_yes=lambda x: self.on_delete(tagged_files), on_no=lambda x: self.close_dialog()), self.screen.center,
+						on_yes=lambda x: self.on_delete(tagged_files, str(self.screen.center.focus.cwd)), on_no=lambda x: self.close_dialog()), self.screen.center,
 						'center', max(len(question) + 6, 21),
 						'middle', 'pack',
 					), self.screen.pile.options())
@@ -329,21 +342,38 @@ class App(object):
 		self.screen.pile.contents[0] = (self.screen.center, self.screen.pile.options())
 		self.screen.center.focus.remove_force_focus()
 
-	def on_delete(self, files):
+	def on_delete(self, files, cwd):
 		self.close_dialog()
+
+		self.screen.center.focus.force_focus()
+
+		q = Queue()
+		dlg = DlgDirscan(self, cwd, q)
+		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+			'center', ('relative', 50),
+			'middle', 'pack',
+		), self.screen.pile.options())
+
+		fd = self.loop.watch_pipe(dlg.on_pipe_data)
+		dlg.fd = fd
+
+		t = Thread(target=dirscan, args=(files, cwd, fd, q))
+		t.start()
+		#dirscan(files, cwd, fd, q)
 
 
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-V', '--version', action='version', version=f'%(prog)s {__version__}')
 	parser.add_argument('-P', '--printwd', help='Print last working directory to specified file', metavar='<file>')
+	parser.add_argument('-b', '--nocolor', help='Requests to run in black and white', action='store_true')
 	parser.add_argument('-d', '--debug', help='activate debug mode', action='store_true')
 	args = parser.parse_args()
 
 	if args.debug:
 		set_debug_fh(open(Path.home() / 'rnr.log', 'w', buffering=1))
 
-	app = App(args.printwd)
+	app = App(args.printwd, args.nocolor)
 	app.run()
 
 

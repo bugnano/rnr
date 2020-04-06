@@ -25,7 +25,7 @@ import stat
 
 from pathlib import Path
 from queue import Queue
-from threading import Thread
+from threading import (Thread, Event)
 
 import urwid
 
@@ -63,6 +63,7 @@ from .dlg_error import DlgError
 from .dlg_question import DlgQuestion
 from .dlg_dirscan import DlgDirscan
 from .dirscan import dirscan
+from .dlg_delete import DlgDelete
 from .debug_print import (debug_print, set_debug_fh)
 
 
@@ -93,6 +94,7 @@ PALETTE = [
 	('dialog', DIALOG_FG, DIALOG_BG, 'standout'),
 	('dialog_title', DIALOG_TITLE_FG, DIALOG_BG, 'standout'),
 	('dialog_focus', DIALOG_FOCUS_FG, DIALOG_FOCUS_BG, 'standout'),
+	('progress', DIALOG_BG, DIALOG_FG),
 ]
 
 
@@ -348,7 +350,9 @@ class App(object):
 		self.screen.center.focus.force_focus()
 
 		q = Queue()
-		dlg = DlgDirscan(self, cwd, q)
+		ev_abort = Event()
+		ev_skip = Event()
+		dlg = DlgDirscan(self, cwd, q, ev_abort, ev_skip, self.do_delete)
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 50),
 			'middle', 'pack',
@@ -357,9 +361,22 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		t = Thread(target=dirscan, args=(files, cwd, fd, q))
+		t = Thread(target=dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip))
 		t.start()
-		#dirscan(files, cwd, fd, q)
+
+	def do_delete(self, file_list, error_list, skipped_list):
+		self.screen.center.focus.force_focus()
+
+		q = Queue()
+		ev_skip = Event()
+		ev_suspend = Event()
+		ev_abort = Event()
+		dlg = DlgDelete(self, len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort)
+		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+			'center', ('relative', 75),
+			'middle', 'pack',
+		), self.screen.pile.options())
+		pass
 
 
 def main():

@@ -22,39 +22,57 @@ import os
 from .debug_print import (debug_print, debug_pprint)
 
 
-def recursive_dirscan(dir_, error_list, err, info, fd, q):
-	file_list = []
+def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, fd, q, ev_abort, ev_skip):
+	files = []
+	errors = []
+	old_files = info['files']
+	old_bytes = info['bytes']
 
 	for file in os.scandir(dir_):
+		if ev_abort.is_set():
+			return False
+
+		if ev_skip.is_set():
+			ev_skip.clear()
+			info['files'] = old_files
+			info['bytes'] = old_bytes
+			skipped_list.append(dir_)
+			return False
+
 		try:
 			lstat = file.stat(follow_symlinks=False)
-			info['bytes'] += lstat.st_size
+			info['current'] = dir_
 			info['files'] += 1
+			info['bytes'] += lstat.st_size
 			if file.is_symlink():
-				file_list.append({'file': file.path, 'is_dir': False, 'size': lstat.st_size})
+				files.append({'file': file.path, 'is_dir': False, 'size': lstat.st_size})
 			elif file.is_dir():
-				file_list.append({'file': file.path, 'is_dir': True, 'size': lstat.st_size})
-				info['current'] = file.path
-				try:
-					file_list.extend(recursive_dirscan(file, error_list, err, info, fd, q))
-				except OSError as e:
-					error_list.append({'file': file.path, 'error': f'{e.strerror} ({e.errno})'})
-					err.append(file.path)
+				files.append({'file': file.path, 'is_dir': True, 'size': lstat.st_size})
+				if not recursive_dirscan(file.path, file_list, error_list, skipped_list, info, fd, q, ev_abort, ev_skip):
+					files.pop()
+					info['files'] -= 1
+					info['bytes'] -= lstat.st_size
+
 			else:
-				file_list.append({'file': file.path, 'is_dir': False, 'size': lstat.st_size})
+				files.append({'file': file.path, 'is_dir': False, 'size': lstat.st_size})
 
 			q.put(info.copy())
-			os.write(fd, b'x')
+			try:
+				os.write(fd, b'\n')
+			except OSError:
+				pass
 		except OSError as e:
-			error_list.append({'file': file.path, 'error': f'{e.strerror} ({e.errno})'})
-			err.append(file.path)
+			errors.append({'file': file.path, 'error': f'{e.strerror} ({e.errno})'})
 
-	return file_list
+	file_list.extend(files)
+	error_list.extend(errors)
 
-def dirscan(files, cwd, fd, q):
+	return True
+
+def dirscan(files, cwd, fd, q, ev_abort, ev_skip):
 	file_list = []
 	error_list = []
-	err = []
+	skipped_list = []
 
 	info = {
 		'current': cwd,
@@ -63,33 +81,52 @@ def dirscan(files, cwd, fd, q):
 	}
 
 	for file in files:
+		if ev_abort.is_set():
+			break
+
+		if ev_skip.is_set():
+			ev_skip.clear()
+			del file_list[:]
+			del error_list[:]
+			del skipped_list[:]
+			info['files'] = 0
+			info['bytes'] = 0
+			skipped_list.append(cwd)
+			break
+
 		try:
 			lstat = file.lstat()
-			info['bytes'] += lstat.st_size
+			info['current'] = cwd
 			info['files'] += 1
+			info['bytes'] += lstat.st_size
 			if file.is_symlink():
 				file_list.append({'file': str(file), 'is_dir': False, 'size': lstat.st_size})
 			elif file.is_dir():
 				file_list.append({'file': str(file), 'is_dir': True, 'size': lstat.st_size})
-				info['current'] = str(file)
-				try:
-					file_list.extend(recursive_dirscan(file, error_list, err, info, fd, q))
-				except OSError as e:
-					error_list.append({'file': str(file), 'error': f'{e.strerror} ({e.errno})'})
-					err.append(str(file))
+				if not recursive_dirscan(str(file), file_list, error_list, skipped_list, info, fd, q, ev_abort, ev_skip):
+					file_list.pop()
+					info['files'] -= 1
+					info['bytes'] -= lstat.st_size
 			else:
 				file_list.append({'file': str(file), 'is_dir': False, 'size': lstat.st_size})
 
 			q.put(info.copy())
-			os.write(fd, b'x')
+			try:
+				os.write(fd, b'\n')
+			except OSError:
+				pass
 		except OSError as e:
 			error_list.append({'file': str(file), 'error': f'{e.strerror} ({e.errno})'})
-			err.append(str(file))
 
-	if err:
+	old_file_list = file_list[:]
+	if error_list:
+		err = [x['file'] for x in error_list]
 		file_list = [x for x in file_list if x['file'] not in err]
 
-	q.put({'result': (file_list, error_list)})
-	os.write(fd, b'x')
+	q.put({'result': file_list, 'error': error_list, 'skipped': skipped_list})
+	try:
+		os.write(fd, b'\n')
+	except OSError:
+		pass
 	os.close(fd)
 

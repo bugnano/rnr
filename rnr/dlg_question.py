@@ -21,8 +21,7 @@ import os
 
 import urwid
 
-from .tilde_layout import TildeLayout
-from .tline_widget import TLineWidget
+from .utils import TildeLayout
 
 
 class DlgQuestion(urwid.WidgetWrap):
@@ -32,16 +31,17 @@ class DlgQuestion(urwid.WidgetWrap):
 		w = urwid.Filler(urwid.Text(f' {question} ', align='center', layout=TildeLayout))
 		w = urwid.LineBox(w, title, title_attr='error_title', bline='')
 		top = urwid.Padding(w, left=1, right=1)
+
 		self.btn_yes = urwid.AttrMap(urwid.Button('Yes', on_yes), 'error', 'error_focus')
 		self.btn_no = urwid.AttrMap(urwid.Button('No', on_no), 'error', 'error_focus')
 		w = urwid.Columns([urwid.Divider(' '), (7, self.btn_yes), (2, urwid.Text('  ')), (6, self.btn_no), urwid.Divider(' ')])
-		w = urwid.LineBox(urwid.Filler(w), tline='')
+		w = urwid.LineBox(urwid.Filler(w), tlcorner='├', trcorner='┤')
+		bottom = urwid.Padding(w, left=1, right=1)
 
 		w = urwid.Pile([
 			(1, urwid.Filler(urwid.Text(' '))),
 			(2, top),
-			(1, urwid.Padding(urwid.Filler(TLineWidget(urwid.Text(''))), left=1, right=1)),
-			(2, urwid.Padding(w, left=1, right=1)),
+			(3, bottom),
 			(1, urwid.Filler(urwid.Text(' '))),
 		])
 		w = urwid.AttrMap(w, 'error')

@@ -24,34 +24,42 @@ import urwid
 from .utils import (human_readable_size, TildeLayout)
 
 
-class DlgDirscan(urwid.WidgetWrap):
-	def __init__(self, controller, cwd, q, ev_abort, ev_skip, on_complete):
+class DlgDelete(urwid.WidgetWrap):
+	def __init__(self, controller, num_files, total_size, q, ev_skip, ev_suspend, ev_abort):
 		self.controller = controller
 		self.q = q
-		self.ev_abort = ev_abort
 		self.ev_skip = ev_skip
-		self.on_complete = on_complete
+		self.ev_suspend = ev_suspend
+		self.ev_abort = ev_abort
 
-		self.current = urwid.Text(cwd, layout=TildeLayout)
-		self.files = urwid.Text(f'Files: 0', layout=TildeLayout)
-		self.bytes = urwid.Text(f'Total size: 0', layout=TildeLayout)
-		w = urwid.Pile([
-			(1, urwid.Filler(self.current)),
-			(1, urwid.Filler(self.files)),
-			(1, urwid.Filler(self.bytes)),
-		])
-		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), 'Directory scanning', title_attr='dialog_title', bline='')
+		self.current = urwid.Text(' ', layout=TildeLayout)
+		w = urwid.Filler(self.current)
+		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), 'Delete', title_attr='dialog_title', bline='')
 		top = urwid.Padding(w, left=1, right=1)
 
-		self.btn_abort = urwid.AttrMap(urwid.Button('Abort', lambda x: self.on_abort()), 'dialog', 'dialog_focus')
+		self.files = urwid.Text(f'Files processed: 0/{num_files}', layout=TildeLayout)
+		self.time = urwid.Text(f'Time: 0d 00:00:00 ETA 0d 00:00:00', layout=TildeLayout)
+		self.progress = urwid.ProgressBar('dialog', 'progress', 0, (num_files or 100))
+		w = urwid.Columns([(1, urwid.Text('[')), self.progress, (1, urwid.Text(']'))])
+		w = urwid.Pile([
+			(1, urwid.Filler(w)),
+			(1, urwid.Filler(self.files)),
+			(1, urwid.Filler(self.time)),
+		])
+		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), f'Total: {human_readable_size(0)}/{human_readable_size(total_size)}', tlcorner='├', trcorner='┤', bline='')
+		middle = urwid.Padding(w, left=1, right=1)
+
 		self.btn_skip = urwid.AttrMap(urwid.Button('Skip', lambda x: self.on_skip()), 'dialog', 'dialog_focus')
-		w = urwid.Columns([urwid.Divider(' '), (9, self.btn_abort), (1, urwid.Text(' ')), (8, self.btn_skip), urwid.Divider(' ')])
+		self.btn_suspend = urwid.AttrMap(urwid.Button('Suspend', lambda x: self.on_suspend()), 'dialog', 'dialog_focus')
+		self.btn_abort = urwid.AttrMap(urwid.Button('Abort', lambda x: self.on_abort()), 'dialog', 'dialog_focus')
+		w = urwid.Columns([urwid.Divider(' '), (8, self.btn_skip), (1, urwid.Text(' ')), (11, self.btn_suspend), (1, urwid.Text(' ')), (9, self.btn_abort), urwid.Divider(' ')])
 		w = urwid.LineBox(urwid.Filler(w), tlcorner='├', trcorner='┤')
 		bottom = urwid.Padding(w, left=1, right=1)
 
 		w = urwid.Pile([
 			(1, urwid.Filler(urwid.Text(' '))),
-			(4, top),
+			(2, top),
+			(4, middle),
 			(3, bottom),
 			(1, urwid.Filler(urwid.Text(' '))),
 		])
@@ -78,8 +86,7 @@ class DlgDirscan(urwid.WidgetWrap):
 		elif 'result' in info:
 			retval = False
 			self.controller.close_dialog()
-			if not self.ev_abort.is_set():
-				self.on_complete(info['result'], info['error'], info['skipped'])
+			self.on_complete(info['result'], info['error'])
 		else:
 			self.current.set_text(info['current'])
 			self.files.set_text(f'Files: {info["files"]}')
@@ -87,12 +94,18 @@ class DlgDirscan(urwid.WidgetWrap):
 
 		return retval
 
+	def on_skip(self):
+		self.ev_skip.set()
+
+	def on_suspend(self):
+		if self.ev_suspend.is_set():
+			self.ev_suspend.clear()
+		else:
+			self.ev_suspend.set()
+
 	def on_abort(self):
 		self.ev_abort.set()
 		self.controller.close_dialog()
 
 		return False
-
-	def on_skip(self):
-		self.ev_skip.set()
 

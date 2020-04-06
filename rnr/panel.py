@@ -22,7 +22,6 @@ import os
 import stat
 import pwd
 import grp
-import datetime
 import functools
 import collections
 import shutil
@@ -35,31 +34,8 @@ import urwid
 
 from fuzzyfinder import fuzzyfinder
 
-from .tilde_layout import TildeLayout
-from .tline_widget import TLineWidget
+from .utils import (human_readable_size, format_date, TildeLayout, TLineWidget)
 from .debug_print import debug_print
-
-
-def human_readable_size(size):
-	if size < 1024:
-		return f'{size:d}B'
-
-	for suffix in ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']:
-		size /= 1024
-		if size < 1024:
-			break
-
-	return f'{size:.{max(4 - len(str(int(size))), 1)}f}{suffix}'
-
-def format_date(d):
-	d = datetime.datetime.fromtimestamp(d)
-	today = datetime.date.today()
-	if d.date() == today:
-		return d.strftime('%H:%M').center(7)
-	elif d.year == today.year:
-		return d.strftime('%b %d').center(7)
-	else:
-		return d.strftime('%Y-%m').center(7)
 
 
 def sort_by_name(a, b, reverse=False):
@@ -311,7 +287,11 @@ class Panel(urwid.WidgetWrap):
 					'extension': file.suffix.casefold(),
 				}
 
-				lstat = file.lstat()
+				try:
+					lstat = file.lstat()
+				except FileNotFoundError:
+					continue
+
 				obj['lstat'] = lstat
 
 				if stat.S_ISLNK(lstat.st_mode):
@@ -635,7 +615,7 @@ class Panel(urwid.WidgetWrap):
 
 	def get_tagged_files(self):
 		if self.tagged_files:
-			return sorted(self.tagged_files)
+			return list(self.tagged_files)
 		else:
 			try:
 				file = self.get_focus()['file']

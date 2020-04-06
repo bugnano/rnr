@@ -19,7 +19,54 @@
 import sys
 import os
 
+import datetime
+
 import urwid
+
+
+def human_readable_size(size):
+	if size < 1024:
+		return f'{size:d}B'
+
+	for suffix in ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']:
+		size /= 1024
+		if size < 1024:
+			break
+
+	return f'{size:.{max(4 - len(str(int(size))), 1)}f}{suffix}'
+
+def format_date(d):
+	d = datetime.datetime.fromtimestamp(d)
+	today = datetime.date.today()
+	if d.date() == today:
+		return d.strftime('%H:%M').center(7)
+	elif d.year == today.year:
+		return d.strftime('%b %d').center(7)
+	else:
+		return d.strftime('%Y-%m').center(7)
+
+
+class TildeTextLayout(urwid.TextLayout):
+	def layout(self, text, width, align, wrap):
+		if len(text) <= width:
+			return [[(len(text), 0, text.encode('utf-8'))]]
+
+		full_len = max(width - 1, 2)
+		half = int(full_len / 2)
+		left = half
+		right = full_len - left
+
+		return [[(width, 0, f'{text[:left]}~{text[-right:]}'[:width].encode('utf-8'))]]
+
+	def pack(self, maxcol, layout):
+		maxwidth = 0
+		for l in layout:
+			for line in l:
+				maxwidth = max(line[0], maxwidth)
+
+		return min(maxwidth, maxcol)
+
+TildeLayout = TildeTextLayout()
 
 
 class TLineWidget(urwid.WidgetWrap):

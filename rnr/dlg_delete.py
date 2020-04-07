@@ -21,12 +21,14 @@ import os
 
 import urwid
 
-from .utils import (human_readable_size, TildeLayout)
+from .utils import (human_readable_size, format_seconds, TildeLayout)
 
 
 class DlgDelete(urwid.WidgetWrap):
 	def __init__(self, controller, num_files, total_size, q, ev_skip, ev_suspend, ev_abort):
 		self.controller = controller
+		self.num_files = num_files
+		self.total_size = total_size
 		self.q = q
 		self.ev_skip = ev_skip
 		self.ev_suspend = ev_suspend
@@ -37,8 +39,8 @@ class DlgDelete(urwid.WidgetWrap):
 		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), 'Delete', title_attr='dialog_title', bline='')
 		top = urwid.Padding(w, left=1, right=1)
 
-		self.files = urwid.Text(f'Files processed: 0/{num_files}', layout=TildeLayout)
-		self.time = urwid.Text(f'Time: 0d 00:00:00 ETA 0d 00:00:00', layout=TildeLayout)
+		self.files = urwid.Text(f'Files processed: 0/{self.num_files}', layout=TildeLayout)
+		self.time = urwid.Text(f'Time: {format_seconds(0)} ETA {format_seconds(0)}', layout=TildeLayout)
 		self.progress = urwid.ProgressBar('dialog', 'progress', 0, (num_files or 100))
 		w = urwid.Columns([(1, urwid.Text('[')), self.progress, (1, urwid.Text(']'))])
 		w = urwid.Pile([
@@ -46,13 +48,16 @@ class DlgDelete(urwid.WidgetWrap):
 			(1, urwid.Filler(self.files)),
 			(1, urwid.Filler(self.time)),
 		])
-		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), f'Total: {human_readable_size(0)}/{human_readable_size(total_size)}', tlcorner='├', trcorner='┤', bline='')
-		middle = urwid.Padding(w, left=1, right=1)
+		self.divider = urwid.LineBox(urwid.Padding(w, left=1, right=1), f'Total: {human_readable_size(0)}/{human_readable_size(self.total_size)}', tlcorner='├', trcorner='┤', bline='')
+		middle = urwid.Padding(self.divider, left=1, right=1)
 
-		self.btn_skip = urwid.AttrMap(urwid.Button('Skip', lambda x: self.on_skip()), 'dialog', 'dialog_focus')
-		self.btn_suspend = urwid.AttrMap(urwid.Button('Suspend', lambda x: self.on_suspend()), 'dialog', 'dialog_focus')
-		self.btn_abort = urwid.AttrMap(urwid.Button('Abort', lambda x: self.on_abort()), 'dialog', 'dialog_focus')
-		w = urwid.Columns([urwid.Divider(' '), (8, self.btn_skip), (1, urwid.Text(' ')), (11, self.btn_suspend), (1, urwid.Text(' ')), (9, self.btn_abort), urwid.Divider(' ')])
+		self.btn_skip = urwid.Button('Skip', lambda x: self.on_skip())
+		attr_btn_skip = urwid.AttrMap(self.btn_skip, 'dialog', 'dialog_focus')
+		self.btn_suspend = urwid.Button('Suspend', lambda x: self.on_suspend())
+		attr_btn_suspend = urwid.AttrMap(self.btn_suspend, 'dialog', 'dialog_focus')
+		self.btn_abort = urwid.Button('Abort', lambda x: self.on_abort())
+		attr_btn_abort = urwid.AttrMap(self.btn_abort, 'dialog', 'dialog_focus')
+		w = urwid.Columns([urwid.Divider(' '), (8, attr_btn_skip), (1, urwid.Text(' ')), (12, attr_btn_suspend), (1, urwid.Text(' ')), (9, attr_btn_abort), urwid.Divider(' ')])
 		w = urwid.LineBox(urwid.Filler(w), tlcorner='├', trcorner='┤')
 		bottom = urwid.Padding(w, left=1, right=1)
 
@@ -86,26 +91,40 @@ class DlgDelete(urwid.WidgetWrap):
 		elif 'result' in info:
 			retval = False
 			self.controller.close_dialog()
-			self.on_complete(info['result'], info['error'])
+			#self.on_complete(info['result'], info['error'])
 		else:
 			self.current.set_text(info['current'])
-			self.files.set_text(f'Files: {info["files"]}')
-			self.bytes.set_text(f'Total size: {human_readable_size(info["bytes"])}')
+			self.divider.set_title(f'Total: {human_readable_size(info["bytes"])}/{human_readable_size(self.total_size)}')
+			self.files.set_text(f'Files processed: {info["files"]}/{self.num_files}')
+
+			fps = info['files'] / (info['time'] or 1)
+			eta = int(round((self.num_files - info['files']) / (fps or 1)))
+			self.time.set_text(f'Time: {format_seconds(info["time"])} ETA {format_seconds(eta)}')
+
+			self.progress.set_completion(info['files'])
 
 		return retval
 
 	def on_skip(self):
 		self.ev_skip.set()
 
+		if not self.ev_suspend.is_set():
+			self.on_suspend()
+
 	def on_suspend(self):
 		if self.ev_suspend.is_set():
 			self.ev_suspend.clear()
+			self.btn_suspend.set_label('Continue')
 		else:
 			self.ev_suspend.set()
+			self.btn_suspend.set_label('Suspend')
 
 	def on_abort(self):
 		self.ev_abort.set()
 		self.controller.close_dialog()
+
+		if not self.ev_suspend.is_set():
+			self.on_suspend()
 
 		return False
 

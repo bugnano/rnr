@@ -64,6 +64,7 @@ from .dlg_question import DlgQuestion
 from .dlg_dirscan import DlgDirscan
 from .dirscan import dirscan
 from .dlg_delete import DlgDelete
+from .delete import delete
 from .debug_print import (debug_print, set_debug_fh)
 
 
@@ -370,13 +371,19 @@ class App(object):
 		q = Queue()
 		ev_skip = Event()
 		ev_suspend = Event()
+		ev_suspend.set()
 		ev_abort = Event()
 		dlg = DlgDelete(self, len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort)
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
 		), self.screen.pile.options())
-		pass
+
+		fd = self.loop.watch_pipe(dlg.on_pipe_data)
+		dlg.fd = fd
+
+		t = Thread(target=delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort))
+		t.start()
 
 
 def main():

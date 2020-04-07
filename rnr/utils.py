@@ -45,6 +45,16 @@ def format_date(d):
 	else:
 		return d.strftime('%Y-%m').center(7)
 
+def format_seconds(t):
+	days, remainder = divmod(t, 86400)
+	hours, remainder = divmod(remainder, 3600)
+	minutes, seconds = divmod(remainder, 60)
+
+	if days:
+		return f'{days}d{hours:02d}:{minutes:02d}:{seconds:02d}'
+	else:
+		return f'{hours:02d}:{minutes:02d}:{seconds:02d}'
+
 
 class TildeTextLayout(urwid.TextLayout):
 	def layout(self, text, width, align, wrap):

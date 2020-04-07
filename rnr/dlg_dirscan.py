@@ -43,9 +43,11 @@ class DlgDirscan(urwid.WidgetWrap):
 		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), 'Directory scanning', title_attr='dialog_title', bline='')
 		top = urwid.Padding(w, left=1, right=1)
 
-		self.btn_abort = urwid.AttrMap(urwid.Button('Abort', lambda x: self.on_abort()), 'dialog', 'dialog_focus')
-		self.btn_skip = urwid.AttrMap(urwid.Button('Skip', lambda x: self.on_skip()), 'dialog', 'dialog_focus')
-		w = urwid.Columns([urwid.Divider(' '), (9, self.btn_abort), (1, urwid.Text(' ')), (8, self.btn_skip), urwid.Divider(' ')])
+		self.btn_abort = urwid.Button('Abort', lambda x: self.on_abort())
+		attr_btn_abort = urwid.AttrMap(self.btn_abort, 'dialog', 'dialog_focus')
+		self.btn_skip = urwid.Button('Skip', lambda x: self.on_skip())
+		attr_btn_skip = urwid.AttrMap(self.btn_skip, 'dialog', 'dialog_focus')
+		w = urwid.Columns([urwid.Divider(' '), (9, attr_btn_abort), (1, urwid.Text(' ')), (8, attr_btn_skip), urwid.Divider(' ')])
 		w = urwid.LineBox(urwid.Filler(w), tlcorner='├', trcorner='┤')
 		bottom = urwid.Padding(w, left=1, right=1)
 

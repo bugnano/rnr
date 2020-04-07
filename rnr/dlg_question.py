@@ -32,9 +32,11 @@ class DlgQuestion(urwid.WidgetWrap):
 		w = urwid.LineBox(w, title, title_attr='error_title', bline='')
 		top = urwid.Padding(w, left=1, right=1)
 
-		self.btn_yes = urwid.AttrMap(urwid.Button('Yes', on_yes), 'error', 'error_focus')
-		self.btn_no = urwid.AttrMap(urwid.Button('No', on_no), 'error', 'error_focus')
-		w = urwid.Columns([urwid.Divider(' '), (7, self.btn_yes), (2, urwid.Text('  ')), (6, self.btn_no), urwid.Divider(' ')])
+		self.btn_yes = urwid.Button('Yes', on_yes)
+		attr_btn_yes = urwid.AttrMap(self.btn_yes, 'error', 'error_focus')
+		self.btn_no = urwid.Button('No', on_no)
+		attr_btn_no = urwid.AttrMap(self.btn_no, 'error', 'error_focus')
+		w = urwid.Columns([urwid.Divider(' '), (7, attr_btn_yes), (2, urwid.Text('  ')), (6, attr_btn_no), urwid.Divider(' ')])
 		w = urwid.LineBox(urwid.Filler(w), tlcorner='├', trcorner='┤')
 		bottom = urwid.Padding(w, left=1, right=1)
 

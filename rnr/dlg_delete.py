@@ -25,7 +25,7 @@ from .utils import (human_readable_size, format_seconds, TildeLayout)
 
 
 class DlgDelete(urwid.WidgetWrap):
-	def __init__(self, controller, num_files, total_size, q, ev_skip, ev_suspend, ev_abort):
+	def __init__(self, controller, num_files, total_size, q, ev_skip, ev_suspend, ev_abort, on_complete):
 		self.controller = controller
 		self.num_files = num_files
 		self.total_size = total_size
@@ -33,6 +33,7 @@ class DlgDelete(urwid.WidgetWrap):
 		self.ev_skip = ev_skip
 		self.ev_suspend = ev_suspend
 		self.ev_abort = ev_abort
+		self.on_complete = on_complete
 
 		self.current = urwid.Text(' ', layout=TildeLayout)
 		w = urwid.Filler(self.current)
@@ -91,14 +92,16 @@ class DlgDelete(urwid.WidgetWrap):
 		elif 'result' in info:
 			retval = False
 			self.controller.close_dialog()
-			#self.on_complete(info['result'], info['error'])
+			self.controller.abort.discard(self.ev_abort)
+			self.controller.suspend.discard(self.ev_suspend)
+			self.on_complete(info['result'], info['error'], info['skipped'])
 		else:
 			self.current.set_text(info['current'])
 			self.divider.set_title(f'Total: {human_readable_size(info["bytes"])}/{human_readable_size(self.total_size)}')
 			self.files.set_text(f'Files processed: {info["files"]}/{self.num_files}')
 
 			fps = info['files'] / (info['time'] or 1)
-			eta = int(round((self.num_files - info['files']) / (fps or 1)))
+			eta = max(int(round((self.num_files - info['files']) / (fps or 1))), 0)
 			self.time.set_text(f'Time: {format_seconds(info["time"])} ETA {format_seconds(eta)}')
 
 			self.progress.set_completion(info['files'])
@@ -121,6 +124,8 @@ class DlgDelete(urwid.WidgetWrap):
 
 	def on_abort(self):
 		self.ev_abort.set()
+		self.controller.abort.discard(self.ev_abort)
+		self.controller.suspend.discard(self.ev_suspend)
 		self.controller.close_dialog()
 
 		if not self.ev_suspend.is_set():

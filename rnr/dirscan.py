@@ -19,10 +19,12 @@
 import sys
 import os
 
+import time
+
 from .debug_print import (debug_print, debug_pprint)
 
 
-def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, fd, q, ev_abort, ev_skip):
+def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, last_write, fd, q, ev_abort, ev_skip):
 	files = []
 	errors = []
 	old_files = info['files']
@@ -48,7 +50,7 @@ def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, fd, q, ev
 				files.append({'file': file.path, 'is_dir': False, 'size': lstat.st_size})
 			elif file.is_dir():
 				files.append({'file': file.path, 'is_dir': True, 'size': lstat.st_size})
-				if not recursive_dirscan(file.path, file_list, error_list, skipped_list, info, fd, q, ev_abort, ev_skip):
+				if not recursive_dirscan(file.path, file_list, error_list, skipped_list, info, last_write, fd, q, ev_abort, ev_skip):
 					files.pop()
 					info['files'] -= 1
 					info['bytes'] -= lstat.st_size
@@ -56,11 +58,14 @@ def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, fd, q, ev
 			else:
 				files.append({'file': file.path, 'is_dir': False, 'size': lstat.st_size})
 
-			q.put(info.copy())
-			try:
-				os.write(fd, b'\n')
-			except OSError:
-				pass
+			now = time.monotonic()
+			if (now - last_write[0]) > 0.04:
+				last_write[0] = now
+				q.put(info.copy())
+				try:
+					os.write(fd, b'\n')
+				except OSError:
+					pass
 		except OSError as e:
 			errors.append({'file': file.path, 'error': f'{e.strerror} ({e.errno})'})
 
@@ -80,6 +85,7 @@ def dirscan(files, cwd, fd, q, ev_abort, ev_skip):
 		'bytes': 0,
 	}
 
+	last_write = [time.monotonic()]
 	for file in files:
 		if ev_abort.is_set():
 			break
@@ -103,18 +109,21 @@ def dirscan(files, cwd, fd, q, ev_abort, ev_skip):
 				file_list.append({'file': str(file), 'is_dir': False, 'size': lstat.st_size})
 			elif file.is_dir():
 				file_list.append({'file': str(file), 'is_dir': True, 'size': lstat.st_size})
-				if not recursive_dirscan(str(file), file_list, error_list, skipped_list, info, fd, q, ev_abort, ev_skip):
+				if not recursive_dirscan(str(file), file_list, error_list, skipped_list, info, last_write, fd, q, ev_abort, ev_skip):
 					file_list.pop()
 					info['files'] -= 1
 					info['bytes'] -= lstat.st_size
 			else:
 				file_list.append({'file': str(file), 'is_dir': False, 'size': lstat.st_size})
 
-			q.put(info.copy())
-			try:
-				os.write(fd, b'\n')
-			except OSError:
-				pass
+			now = time.monotonic()
+			if (now - last_write[0]) > 0.04:
+				last_write[0] = now
+				q.put(info.copy())
+				try:
+					os.write(fd, b'\n')
+				except OSError:
+					pass
 		except OSError as e:
 			error_list.append({'file': str(file), 'error': f'{e.strerror} ({e.errno})'})
 

@@ -21,6 +21,8 @@ import os
 
 import time
 
+from pathlib import Path
+
 from .debug_print import (debug_print, debug_pprint)
 
 
@@ -37,11 +39,12 @@ def delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 	}
 
 	time_start = time.monotonic()
+	last_write = time_start
 	for file in file_list:
 		t1 = time.monotonic()
 		ev_suspend.wait()
 		t2 = time.monotonic()
-		time_start += t2 - t1
+		time_start += round(t2 - t1)
 
 		if ev_abort.is_set():
 			break
@@ -52,25 +55,35 @@ def delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 			continue
 
 		info['current'] = file['file']
-		info['files'] += 1
-		info['bytes'] += file['size']
-		info['time'] = int(round(time.monotonic() - time_start))
 
-		q.put(info.copy())
-		try:
-			os.write(fd, b'\n')
-		except OSError:
-			pass
+		now = time.monotonic()
+		if (now - last_write) > 0.04:
+			last_write = now
+			info['time'] = int(round(now - time_start))
+			q.put(info.copy())
+			try:
+				os.write(fd, b'\n')
+			except OSError:
+				pass
 
 		try:
+			parent_dir = Path(file['file']).resolve().parent
+
 			if file['is_dir']:
-				#os.rmdir(file['file'])
-				pass
+				os.rmdir(file['file'])
 			else:
-                #os.remove(file['file'])
-				pass
+				os.remove(file['file'])
+
+			parent_fd = os.open(parent_dir, 0)
+			try:
+				os.fsync(parent_fd)
+			finally:
+				os.close(parent_fd)
 		except OSError as e:
 			error_list.append({'file': file['file'], 'error': f'{e.strerror} ({e.errno})'})
+
+		info['files'] += 1
+		info['bytes'] += file['size']
 
 	q.put({'result': file_list, 'error': error_list, 'skipped': skipped_list})
 	try:

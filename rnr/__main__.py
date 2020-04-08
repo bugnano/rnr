@@ -22,6 +22,8 @@ import os
 import argparse
 import shutil
 import stat
+import signal
+import functools
 
 from pathlib import Path
 from queue import Queue
@@ -65,6 +67,7 @@ from .dlg_dirscan import DlgDirscan
 from .dirscan import dirscan
 from .dlg_delete import DlgDelete
 from .delete import delete
+from .dlg_report import DlgReport
 from .debug_print import (debug_print, set_debug_fh)
 
 
@@ -138,6 +141,8 @@ class App(object):
 
 		self.screen = Screen(self)
 		self.leader = ''
+		self.abort = set()
+		self.suspend = set()
 
 		self.bookmarks = Bookmarks(CONFIG_DIR / 'bookmarks')
 		if 'h' not in self.bookmarks:
@@ -149,7 +154,25 @@ class App(object):
 		if self.nocolor:
 			self.loop.screen.set_terminal_properties(colors=1)
 
+		signal.signal(signal.SIGINT, self.sigint_handler)
+
 		self.loop.run()
+
+	def sigint_handler(self, signum, frame):
+		try:
+			self.loop.stop()
+		except AttributeError:
+			pass
+
+		print('Ctrl+C')
+
+		for ev in self.abort:
+			ev.set()
+
+		for ev in self.suspend:
+			ev.set()
+
+		sys.exit(1)
 
 	def keypress(self, key):
 		if key == 'esc':
@@ -352,8 +375,9 @@ class App(object):
 
 		q = Queue()
 		ev_abort = Event()
+		self.abort.add(ev_abort)
 		ev_skip = Event()
-		dlg = DlgDirscan(self, cwd, q, ev_abort, ev_skip, self.do_delete)
+		dlg = DlgDirscan(self, cwd, q, ev_abort, ev_skip, functools.partial(self.do_delete, cwd=cwd))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 50),
 			'middle', 'pack',
@@ -365,15 +389,17 @@ class App(object):
 		t = Thread(target=dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip))
 		t.start()
 
-	def do_delete(self, file_list, error_list, skipped_list):
+	def do_delete(self, file_list, error_list, skipped_list, cwd):
 		self.screen.center.focus.force_focus()
 
 		q = Queue()
 		ev_skip = Event()
 		ev_suspend = Event()
 		ev_suspend.set()
+		self.suspend.add(ev_suspend)
 		ev_abort = Event()
-		dlg = DlgDelete(self, len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort)
+		self.abort.add(ev_abort)
+		dlg = DlgDelete(self, len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish_delete, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -384,6 +410,18 @@ class App(object):
 
 		t = Thread(target=delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort))
 		t.start()
+
+	def on_finish_delete(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped):
+		if scan_error or error_list or scan_skipped or skipped_list:
+			self.screen.center.focus.force_focus()
+
+			dlg = DlgReport(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped)
+			self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+				'center', ('relative', 75),
+				'middle', ('relative', 75),
+			), self.screen.pile.options())
+		else:
+			self.reload()
 
 
 def main():

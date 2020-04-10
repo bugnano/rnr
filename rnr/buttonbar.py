@@ -23,15 +23,15 @@ import urwid
 
 
 texts = [
-	'Help',
-	'Menu',
+	' ', #'Help',
+	' ', #'Menu',
 	'View',
 	'Edit',
 	'Copy',
 	'RenMov',
 	'Mkdir',
 	'Delete',
-	'PullDn',
+	' ', #'PullDn',
 	'Quit',
 ]
 

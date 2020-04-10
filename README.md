@@ -99,3 +99,7 @@ moment.
 * **-**, **\\**: Untag files that match the shell wildcard pattern
 * **uv**: Untag all files
 
+#### Operations on tagged files
+
+* **F8**: Delete tagged files (or selected file)
+

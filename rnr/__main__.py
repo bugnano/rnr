@@ -65,9 +65,12 @@ from .dlg_error import DlgError
 from .dlg_question import DlgQuestion
 from .dlg_dirscan import DlgDirscan
 from .dirscan import dirscan
-from .dlg_delete import DlgDelete
-from .delete import delete
+from .dlg_delete_progress import DlgDeleteProgress
+from .rnr_delete import rnr_delete
 from .dlg_report import DlgReport
+from .dlg_cpmv import DlgCpMv
+from .dlg_cpmv_progress import DlgCpMvProgress
+from .rnr_copy import rnr_copy
 from .debug_print import (debug_print, set_debug_fh)
 
 
@@ -99,6 +102,7 @@ PALETTE = [
 	('dialog_title', DIALOG_TITLE_FG, DIALOG_BG, 'standout'),
 	('dialog_focus', DIALOG_FOCUS_FG, DIALOG_FOCUS_BG, 'standout'),
 	('progress', DIALOG_BG, DIALOG_FG),
+	('input', INPUT_FG, INPUT_BG),
 ]
 
 
@@ -332,6 +336,25 @@ class App(object):
 						'center', max(len(question) + 6, 21),
 						'middle', 'pack',
 					), self.screen.pile.options())
+			elif key == 'f5':
+				tagged_files = self.screen.center.focus.get_tagged_files()
+				if tagged_files:
+					if len(tagged_files) == 1:
+						question = f'Copy {tagged_files[0].name} to:'
+					else:
+						question = f'Copy {len(tagged_files)} files/directories to:'
+
+					if self.screen.center.focus == self.screen.left:
+						dest_dir = self.screen.right.cwd
+					else:
+						dest_dir = self.screen.left.cwd
+
+					self.screen.center.focus.force_focus()
+					self.screen.pile.contents[0] = (urwid.Overlay(DlgCpMv(self, title='Copy', question=question, dest_dir=str(dest_dir),
+						on_ok=functools.partial(self.on_copy, tagged_files, str(self.screen.center.focus.cwd)), on_cancel=lambda x: self.close_dialog()), self.screen.center,
+						'center', ('relative', 85),
+						'middle', 'pack',
+					), self.screen.pile.options())
 
 	def reload(self, focus_path=None, old_focus=None):
 		if old_focus is None:
@@ -368,16 +391,14 @@ class App(object):
 		self.screen.pile.contents[0] = (self.screen.center, self.screen.pile.options())
 		self.screen.center.focus.remove_force_focus()
 
-	def on_delete(self, files, cwd):
-		self.close_dialog()
-
+	def do_dirscan(self, files, cwd, on_complete):
 		self.screen.center.focus.force_focus()
 
 		q = Queue()
 		ev_abort = Event()
 		self.abort.add(ev_abort)
 		ev_skip = Event()
-		dlg = DlgDirscan(self, cwd, q, ev_abort, ev_skip, functools.partial(self.do_delete, cwd=cwd))
+		dlg = DlgDirscan(self, cwd, q, ev_abort, ev_skip, on_complete)
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 50),
 			'middle', 'pack',
@@ -386,8 +407,11 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		t = Thread(target=dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip))
-		t.start()
+		Thread(target=dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip)).start()
+
+	def on_delete(self, files, cwd):
+		self.close_dialog()
+		self.do_dirscan(files, cwd, functools.partial(self.do_delete, cwd=cwd))
 
 	def do_delete(self, file_list, error_list, skipped_list, cwd):
 		self.screen.center.focus.force_focus()
@@ -399,7 +423,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgDelete(self, len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish_delete, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgDeleteProgress(self, len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish_delete, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -408,8 +432,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		t = Thread(target=delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort))
-		t.start()
+		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort)).start()
 
 	def on_finish_delete(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped):
 		if scan_error or error_list or scan_skipped or skipped_list:
@@ -422,6 +445,59 @@ class App(object):
 			), self.screen.pile.options())
 		else:
 			self.reload()
+
+	def on_copy(self, files, cwd, dest, on_conflict):
+		self.close_dialog()
+
+		path_cwd = Path(cwd)
+		path_dest = Path(dest)
+		if not path_dest.is_absolute():
+			path_dest = Path(os.path.normpath(path_cwd / path_dest))
+
+		if len(files) == 1:
+			pass
+		else:
+			if not path_dest.is_dir():
+				self.error(f'{dest} is not a directory')
+			elif path_cwd.resolve() == path_dest.resolve():
+				pass
+			else:
+				self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+
+	def do_copy(self, file_list, error_list, skipped_list, cwd, dest, on_conflict):
+		self.screen.center.focus.force_focus()
+
+		q = Queue()
+		ev_skip = Event()
+		ev_suspend = Event()
+		ev_suspend.set()
+		self.suspend.add(ev_suspend)
+		ev_abort = Event()
+		self.abort.add(ev_abort)
+		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish_copy, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
+		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+			'center', ('relative', 75),
+			'middle', 'pack',
+		), self.screen.pile.options())
+
+		fd = self.loop.watch_pipe(dlg.on_pipe_data)
+		dlg.fd = fd
+
+		Thread(target=rnr_copy, args=(file_list, cwd, dest, fd, q, ev_skip, ev_suspend, ev_abort)).start()
+
+	def on_finish_copy(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped):
+		if scan_error or error_list or scan_skipped or skipped_list:
+			self.screen.center.focus.force_focus()
+
+			dlg = DlgReport(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped)
+			self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+				'center', ('relative', 75),
+				'middle', ('relative', 75),
+			), self.screen.pile.options())
+		else:
+			self.reload()
+
+
 
 
 def main():

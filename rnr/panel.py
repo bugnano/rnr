@@ -262,6 +262,16 @@ class Panel(urwid.WidgetWrap):
 			self.title.set_title(f' {str(self.cwd)} ')
 
 	def reload(self, focus_path=None):
+		files_to_discard = []
+		for file in self.tagged_files:
+			if not file.exists():
+				files_to_discard.append(file)
+
+		for file in files_to_discard:
+			self.tagged_files.discard(file)
+
+		self.update_tagged_count()
+
 		try:
 			obj, focus_position = self.walker.get_focus()
 			if focus_path is None:

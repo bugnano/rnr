@@ -24,8 +24,8 @@ import urwid
 from .utils import (human_readable_size, format_seconds, TildeLayout)
 
 
-class DlgDelete(urwid.WidgetWrap):
-	def __init__(self, controller, num_files, total_size, q, ev_skip, ev_suspend, ev_abort, on_complete):
+class DlgCpMvProgress(urwid.WidgetWrap):
+	def __init__(self, controller, title, num_files, total_size, q, ev_skip, ev_suspend, ev_abort, on_complete):
 		self.controller = controller
 		self.num_files = num_files
 		self.total_size = total_size
@@ -35,15 +35,25 @@ class DlgDelete(urwid.WidgetWrap):
 		self.ev_abort = ev_abort
 		self.on_complete = on_complete
 
-		self.current = urwid.Text(' ', layout=TildeLayout)
-		w = urwid.Filler(self.current)
-		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), 'Delete', title_attr='dialog_title', bline='')
+		self.source = urwid.Text(' ', layout=TildeLayout)
+		self.target = urwid.Text(' ', layout=TildeLayout)
+		self.progress_current = urwid.ProgressBar('dialog', 'progress')
+		w = urwid.Columns([(1, urwid.Text('[')), self.progress_current, (1, urwid.Text(']'))])
+		w = urwid.Pile([
+			(1, urwid.Filler(urwid.Text('Source'))),
+			(1, urwid.Filler(self.source)),
+			(1, urwid.Filler(urwid.Text('Target'))),
+			(1, urwid.Filler(self.target)),
+			(1, urwid.Filler(w)),
+			(1, urwid.Filler(urwid.Text(' '))),
+		])
+		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), title, title_attr='dialog_title', bline='')
 		top = urwid.Padding(w, left=1, right=1)
 
 		self.files = urwid.Text(f'Files processed: 0/{self.num_files}', layout=TildeLayout)
-		self.time = urwid.Text(f'Time: {format_seconds(0)} ETA {format_seconds(0)}', layout=TildeLayout)
-		self.progress = urwid.ProgressBar('dialog', 'progress', 0, (num_files or 100))
-		w = urwid.Columns([(1, urwid.Text('[')), self.progress, (1, urwid.Text(']'))])
+		self.time = urwid.Text(f'Time: {format_seconds(0)} ETA {format_seconds(0)} ({human_readable_size(0)}/s)', layout=TildeLayout)
+		self.progress_total = urwid.ProgressBar('dialog', 'progress', 0, (num_files or 100))
+		w = urwid.Columns([(1, urwid.Text('[')), self.progress_total, (1, urwid.Text(']'))])
 		w = urwid.Pile([
 			(1, urwid.Filler(w)),
 			(1, urwid.Filler(self.files)),
@@ -64,7 +74,7 @@ class DlgDelete(urwid.WidgetWrap):
 
 		w = urwid.Pile([
 			(1, urwid.Filler(urwid.Text(' '))),
-			(2, top),
+			(7, top),
 			(4, middle),
 			(3, bottom),
 			(1, urwid.Filler(urwid.Text(' '))),
@@ -96,7 +106,7 @@ class DlgDelete(urwid.WidgetWrap):
 			self.controller.suspend.discard(self.ev_suspend)
 			self.on_complete(info['result'], info['error'], info['skipped'])
 		else:
-			self.current.set_text(info['current'])
+			self.source.set_text(info['current'])
 			self.divider.set_title(f'Total: {human_readable_size(info["bytes"])}/{human_readable_size(self.total_size)}')
 			self.files.set_text(f'Files processed: {info["files"]}/{self.num_files}')
 
@@ -104,7 +114,7 @@ class DlgDelete(urwid.WidgetWrap):
 			eta = max(int(round((self.num_files - info['files']) / (fps or 1))), 0)
 			self.time.set_text(f'Time: {format_seconds(info["time"])} ETA {format_seconds(eta)}')
 
-			self.progress.set_completion(info['files'])
+			self.progress_total.set_completion(info['files'])
 
 		return retval
 
@@ -127,6 +137,7 @@ class DlgDelete(urwid.WidgetWrap):
 		self.controller.abort.discard(self.ev_abort)
 		self.controller.suspend.discard(self.ev_suspend)
 		self.controller.close_dialog()
+		self.controller.reload()
 
 		if not self.ev_suspend.is_set():
 			self.on_suspend()

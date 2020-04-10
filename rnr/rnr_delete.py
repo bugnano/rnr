@@ -26,10 +26,11 @@ from pathlib import Path
 from .debug_print import (debug_print, debug_pprint)
 
 
-def delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
+def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 	file_list = sorted(files, key=lambda x: x['file'], reverse=True)
 	error_list = []
 	skipped_list = []
+	completed_list = []
 
 	info = {
 		'current': '',
@@ -51,7 +52,11 @@ def delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 
 		if ev_skip.is_set():
 			ev_skip.clear()
+
 			skipped_list.append(file['file'])
+
+			info['bytes'] += file['size']
+			info['files'] += 1
 			continue
 
 		info['current'] = file['file']
@@ -79,13 +84,15 @@ def delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 				os.fsync(parent_fd)
 			finally:
 				os.close(parent_fd)
+
+			completed_list.append(file['file'])
 		except OSError as e:
 			error_list.append({'file': file['file'], 'error': f'{e.strerror} ({e.errno})'})
 
-		info['files'] += 1
 		info['bytes'] += file['size']
+		info['files'] += 1
 
-	q.put({'result': file_list, 'error': error_list, 'skipped': skipped_list})
+	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list})
 	try:
 		os.write(fd, b'\n')
 	except OSError:

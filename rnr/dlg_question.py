@@ -51,12 +51,14 @@ class DlgQuestion(urwid.WidgetWrap):
 		super().__init__(w)
 
 	def keypress(self, size, key):
+		if key in ('esc', 'f10'):
+			self.btn_no.keypress(size, 'enter')
+			return
+
 		if key in ('left', 'right', ' ', 'enter'):
 			return super().keypress(size, key)
 		elif key == 'h':
 			return super().keypress(size, 'left')
 		elif key == 'l':
 			return super().keypress(size, 'right')
-		elif key == 'esc':
-			self.btn_no.keypress(size, 'enter')
 

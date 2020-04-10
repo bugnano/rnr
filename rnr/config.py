@@ -41,3 +41,6 @@ DIALOG_TITLE_FG = 'dark blue'
 DIALOG_FOCUS_FG = 'black'
 DIALOG_FOCUS_BG = 'dark cyan'
 
+INPUT_FG = 'black'
+INPUT_BG = 'dark cyan'
+

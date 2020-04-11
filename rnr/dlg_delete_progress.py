@@ -42,7 +42,7 @@ class DlgDeleteProgress(urwid.WidgetWrap):
 
 		self.files = urwid.Text(f'Files processed: 0/{self.num_files}', layout=TildeLayout)
 		self.time = urwid.Text(f'Time: {format_seconds(0)} ETA {format_seconds(0)}', layout=TildeLayout)
-		self.progress = urwid.ProgressBar('dialog', 'progress', 0, (num_files or 100))
+		self.progress = urwid.ProgressBar('dialog', 'progress', 0, (num_files or 1))
 		w = urwid.Columns([(1, urwid.Text('[')), self.progress, (1, urwid.Text(']'))])
 		w = urwid.Pile([
 			(1, urwid.Filler(w)),

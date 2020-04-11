@@ -104,3 +104,9 @@ class TLineWidget(urwid.WidgetWrap):
 	def set_title_attr(self, attr):
 		self.title_attr.set_attr_map({None: attr})
 
+class AbortedError(Exception):
+	pass
+
+class SkippedError(Exception):
+	pass
+

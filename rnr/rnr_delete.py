@@ -20,9 +20,11 @@ import sys
 import os
 
 import time
+import errno
 
 from pathlib import Path
 
+from .utils import (AbortedError, SkippedError)
 from .debug_print import (debug_print, debug_pprint)
 
 
@@ -39,55 +41,60 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 		'time': 0,
 	}
 
-	time_start = time.monotonic()
-	last_write = time_start
+	timers = {}
+
+	timers['start'] = time.monotonic()
+	timers['last_write'] = timers['start']
 	for file in file_list:
-		t1 = time.monotonic()
-		ev_suspend.wait()
-		t2 = time.monotonic()
-		time_start += round(t2 - t1)
-
-		if ev_abort.is_set():
-			break
-
-		if ev_skip.is_set():
-			ev_skip.clear()
-
-			skipped_list.append(file['file'])
-
-			info['bytes'] += file['size']
-			info['files'] += 1
-			continue
-
-		info['current'] = file['file']
-
-		now = time.monotonic()
-		if (now - last_write) > 0.04:
-			last_write = now
-			info['time'] = int(round(now - time_start))
-			q.put(info.copy())
-			try:
-				os.write(fd, b'\n')
-			except OSError:
-				pass
-
 		try:
-			parent_dir = Path(file['file']).resolve().parent
+			t1 = time.monotonic()
+			ev_suspend.wait()
+			t2 = time.monotonic()
+			timers['start'] += round(t2 - t1)
 
-			if file['is_dir']:
-				os.rmdir(file['file'])
-			else:
-				os.remove(file['file'])
+			if ev_abort.is_set():
+				raise AbortedError()
 
-			parent_fd = os.open(parent_dir, 0)
+			if ev_skip.is_set():
+				ev_skip.clear()
+				raise SkippedError()
+
+			info['current'] = file['file']
+
+			now = time.monotonic()
+			if (now - timers['last_write']) > 0.04:
+				timers['last_write'] = now
+				info['time'] = int(round(now - timers['start']))
+				q.put(info.copy())
+				try:
+					os.write(fd, b'\n')
+				except OSError:
+					pass
+
 			try:
-				os.fsync(parent_fd)
-			finally:
-				os.close(parent_fd)
+				parent_dir = Path(file['file']).resolve().parent
 
-			completed_list.append(file['file'])
-		except OSError as e:
-			error_list.append({'file': file['file'], 'error': f'{e.strerror} ({e.errno})'})
+				if file['is_dir']:
+					os.rmdir(file['file'])
+				else:
+					os.remove(file['file'])
+
+				parent_fd = os.open(parent_dir, 0)
+				try:
+					os.fsync(parent_fd)
+				finally:
+					os.close(parent_fd)
+
+				completed_list.append(file['file'])
+			except OSError as e:
+				if e.errno == errno.ENOENT:
+					pass
+				else:
+					error_list.append({'file': file['file'], 'error': f'{e.strerror} ({e.errno})'})
+		except AbortedError as e:
+			break
+		except SkippedError as e:
+			skipped_list.append(file['file'])
 
 		info['bytes'] += file['size']
 		info['files'] += 1

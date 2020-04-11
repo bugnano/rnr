@@ -38,6 +38,7 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 		self.source = urwid.Text(' ', layout=TildeLayout)
 		self.target = urwid.Text(' ', layout=TildeLayout)
 		self.progress_current = urwid.ProgressBar('dialog', 'progress')
+		self.time_current = urwid.Text(f'ETA {format_seconds(0)} ({human_readable_size(0)}/s)', layout=TildeLayout)
 		w = urwid.Columns([(1, urwid.Text('[')), self.progress_current, (1, urwid.Text(']'))])
 		w = urwid.Pile([
 			(1, urwid.Filler(urwid.Text('Source'))),
@@ -45,14 +46,14 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 			(1, urwid.Filler(urwid.Text('Target'))),
 			(1, urwid.Filler(self.target)),
 			(1, urwid.Filler(w)),
-			(1, urwid.Filler(urwid.Text(' '))),
+			(1, urwid.Filler(self.time_current)),
 		])
 		w = urwid.LineBox(urwid.Padding(w, left=1, right=1), title, title_attr='dialog_title', bline='')
 		top = urwid.Padding(w, left=1, right=1)
 
 		self.files = urwid.Text(f'Files processed: 0/{self.num_files}', layout=TildeLayout)
 		self.time = urwid.Text(f'Time: {format_seconds(0)} ETA {format_seconds(0)} ({human_readable_size(0)}/s)', layout=TildeLayout)
-		self.progress_total = urwid.ProgressBar('dialog', 'progress', 0, (num_files or 100))
+		self.progress_total = urwid.ProgressBar('dialog', 'progress', 0, (total_size or 1))
 		w = urwid.Columns([(1, urwid.Text('[')), self.progress_total, (1, urwid.Text(']'))])
 		w = urwid.Pile([
 			(1, urwid.Filler(w)),
@@ -106,15 +107,22 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 			self.controller.suspend.discard(self.ev_suspend)
 			self.on_complete(info['result'], info['error'], info['skipped'])
 		else:
-			self.source.set_text(info['current'])
+			self.source.set_text(info['cur_source'])
+			self.target.set_text(info['cur_target'])
+			self.progress_current.done = info['cur_size'] or 1
+
+			bps = info['cur_bytes'] / (info['cur_time'] or 1)
+			eta = max(int(round((info['cur_size'] - info['cur_bytes']) / (bps or 1))), 0)
+			self.time_current.set_text(f'ETA {format_seconds(eta)} ({human_readable_size(int(round(bps)))}/s)')
+			self.progress_current.set_completion(info['cur_bytes'])
+
 			self.divider.set_title(f'Total: {human_readable_size(info["bytes"])}/{human_readable_size(self.total_size)}')
 			self.files.set_text(f'Files processed: {info["files"]}/{self.num_files}')
 
-			fps = info['files'] / (info['time'] or 1)
-			eta = max(int(round((self.num_files - info['files']) / (fps or 1))), 0)
-			self.time.set_text(f'Time: {format_seconds(info["time"])} ETA {format_seconds(eta)}')
-
-			self.progress_total.set_completion(info['files'])
+			bps = info['bytes'] / (info['time'] or 1)
+			eta = max(int(round((self.total_size - info['bytes']) / (bps or 1))), 0)
+			self.time.set_text(f'Time: {format_seconds(info["time"])} ETA {format_seconds(eta)} ({human_readable_size(int(round(bps)))}/s)')
+			self.progress_total.set_completion(info['bytes'])
 
 		return retval
 

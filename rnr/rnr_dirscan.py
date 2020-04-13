@@ -47,16 +47,16 @@ def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, last_writ
 			info['files'] += 1
 			info['bytes'] += lstat.st_size
 			if file.is_symlink():
-				files.append({'file': file.path, 'is_dir': False, 'is_symlink': True, 'is_file': False, 'size': lstat.st_size})
+				files.append({'file': file.path, 'is_dir': False, 'is_symlink': True, 'is_file': False, 'lstat': lstat})
 			elif file.is_dir():
-				files.append({'file': file.path, 'is_dir': True, 'is_symlink': False, 'is_file': False, 'size': lstat.st_size})
+				files.append({'file': file.path, 'is_dir': True, 'is_symlink': False, 'is_file': False, 'lstat': lstat})
 				if not recursive_dirscan(file.path, file_list, error_list, skipped_list, info, last_write, fd, q, ev_abort, ev_skip):
 					files.pop()
 					info['files'] -= 1
 					info['bytes'] -= lstat.st_size
 
 			else:
-				files.append({'file': file.path, 'is_dir': False, 'is_symlink': False, 'is_file': file.is_file(), 'size': lstat.st_size})
+				files.append({'file': file.path, 'is_dir': False, 'is_symlink': False, 'is_file': file.is_file(), 'lstat': lstat})
 
 			now = time.monotonic()
 			if (now - last_write[0]) > 0.04:
@@ -74,7 +74,7 @@ def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, last_writ
 
 	return True
 
-def dirscan(files, cwd, fd, q, ev_abort, ev_skip):
+def rnr_dirscan(files, cwd, fd, q, ev_abort, ev_skip):
 	file_list = []
 	error_list = []
 	skipped_list = []
@@ -106,15 +106,15 @@ def dirscan(files, cwd, fd, q, ev_abort, ev_skip):
 			info['files'] += 1
 			info['bytes'] += lstat.st_size
 			if file.is_symlink():
-				file_list.append({'file': str(file), 'is_dir': False, 'is_symlink': True, 'is_file': False, 'size': lstat.st_size})
+				file_list.append({'file': str(file), 'is_dir': False, 'is_symlink': True, 'is_file': False, 'lstat': lstat})
 			elif file.is_dir():
-				file_list.append({'file': str(file), 'is_dir': True, 'is_symlink': False, 'is_file': False, 'size': lstat.st_size})
+				file_list.append({'file': str(file), 'is_dir': True, 'is_symlink': False, 'is_file': False, 'lstat': lstat})
 				if not recursive_dirscan(str(file), file_list, error_list, skipped_list, info, last_write, fd, q, ev_abort, ev_skip):
 					file_list.pop()
 					info['files'] -= 1
 					info['bytes'] -= lstat.st_size
 			else:
-				file_list.append({'file': str(file), 'is_dir': False, 'is_symlink': False, 'is_file': file.is_file(), 'size': lstat.st_size})
+				file_list.append({'file': str(file), 'is_dir': False, 'is_symlink': False, 'is_file': file.is_file(), 'lstat': lstat})
 
 			now = time.monotonic()
 			if (now - last_write[0]) > 0.04:

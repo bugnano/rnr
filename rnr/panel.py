@@ -19,6 +19,7 @@
 import sys
 import os
 
+import re
 import stat
 import pwd
 import grp
@@ -27,6 +28,7 @@ import collections
 import shutil
 import subprocess
 import signal
+import unicodedata
 
 from pathlib import Path
 
@@ -38,14 +40,25 @@ from .utils import (human_readable_size, format_date, TildeLayout, TLineWidget)
 from .debug_print import debug_print
 
 
+ReNumbers = re.compile(r'(\d+|\D+)')
+
+def try_int(s):
+	try:
+		return ('0', int(s))
+	except:
+		return (s, 0)
+
+def natsort_key(s):
+	return [try_int(x.group(0)) for x in ReNumbers.finditer(unicodedata.normalize('NFKD', s.casefold()))]
+
 def sort_by_name(a, b, reverse=False):
 	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
 		return (1 if reverse else -1)
 	elif (not stat.S_ISDIR(a['stat'].st_mode)) and stat.S_ISDIR(b['stat'].st_mode):
 		return (-1 if reverse else 1)
-	elif a['name'] < b['name']:
+	elif a['key'] < b['key']:
 		return -1
-	elif a['name'] > b['name']:
+	elif a['key'] > b['key']:
 		return 1
 	else:
 		return 0
@@ -258,8 +271,10 @@ class Panel(urwid.WidgetWrap):
 		if self._reload(cwd, self.cwd):
 			self.old_cwd = self.cwd
 			self.cwd = cwd
+			return True
 		else:
 			self.title.set_title(f' {str(self.cwd)} ')
+			return False
 
 	def reload(self, focus_path=None):
 		files_to_discard = []
@@ -280,7 +295,14 @@ class Panel(urwid.WidgetWrap):
 			focus_path = None
 			focus_position = 0
 
-		self._reload(self.cwd, focus_path, focus_position)
+		if not self._reload(self.cwd, focus_path, focus_position):
+			old_cwd = self.old_cwd
+			parent = self.cwd
+			while parent.parent != parent:
+				parent = parent.parent
+				if self.chdir(parent):
+					self.old_cwd = old_cwd
+					break
 
 	def _reload(self, cwd, focus_path, focus_position=0):
 		cwd = Path(cwd)
@@ -293,7 +315,7 @@ class Panel(urwid.WidgetWrap):
 			for file in cwd.iterdir():
 				obj = {
 					'file': file,
-					'name': file.name.casefold(),
+					'key': natsort_key(file.name),
 					'extension': file.suffix.casefold(),
 				}
 
@@ -369,7 +391,7 @@ class Panel(urwid.WidgetWrap):
 					obj['details'] = f'{obj["details"]} {file.name}'
 
 				files.append(obj)
-		except PermissionError:
+		except (FileNotFoundError, PermissionError):
 			return False
 
 		self.files = files
@@ -425,7 +447,7 @@ class Panel(urwid.WidgetWrap):
 		self.file_filter = filter
 
 		if filter:
-			self.filtered_files = list(fuzzyfinder(filter, self.shown_files, accessor=lambda x: x['name']))
+			self.filtered_files = list(fuzzyfinder(filter, self.shown_files, accessor=lambda x: x['file'].name))
 		else:
 			self.filtered_files = self.shown_files[:]
 
@@ -625,7 +647,7 @@ class Panel(urwid.WidgetWrap):
 
 	def get_tagged_files(self):
 		if self.tagged_files:
-			return list(self.tagged_files)
+			return sorted(self.tagged_files, key=lambda x: natsort_key(x.name))
 		else:
 			try:
 				file = self.get_focus()['file']

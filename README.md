@@ -103,3 +103,18 @@ moment.
 
 * **F8**: Delete tagged files (or selected file)
 
+#### Shell
+
+* **!**: Execute a shell command
+
+The shell command accepts the following substitutions:
+
+* `$f`: The current file
+* `$d`: The current directory
+* `$s`,`$t`: The tagged files
+* `$F`: The file in the other panel
+* `$D`: The directory of the other panel
+* `$S`,`$T`: The tagged files of the other panel
+
+There is no need to enclose these substitutions in quotes, as they are already being quoted by rnr
+

@@ -19,7 +19,12 @@
 import sys
 import os
 
+import shlex
+import subprocess
+import signal
+
 from pathlib import Path
+from string import Template
 
 import urwid
 
@@ -77,6 +82,8 @@ class CmdBar(urwid.WidgetWrap):
 			self.do_tag_glob()
 		elif self.action == 'untag_glob':
 			self.do_untag_glob()
+		elif self.action == 'shell':
+			self.do_shell()
 
 		self.action = None
 		self.leader = ''
@@ -102,7 +109,7 @@ class CmdBar(urwid.WidgetWrap):
 		self.screen.center.focus.force_focus()
 
 	def filter(self):
-		self.prepare_action('filter', '/', self.screen.center.focus.file_filter)
+		self.prepare_action('filter', 'filter: ', self.screen.center.focus.file_filter)
 
 	def mkdir(self, cwd):
 		self.file = cwd
@@ -173,4 +180,53 @@ class CmdBar(urwid.WidgetWrap):
 
 	def do_untag_glob(self):
 		self.screen.center.focus.untag_glob(self.edit.get_edit_text())
+
+	def shell(self):
+		self.prepare_action('shell', 'shell: ', '')
+
+	def do_shell(self):
+		cwd = str(self.screen.center.focus.cwd)
+
+		try:
+			current_file = shlex.quote(str(self.screen.center.focus.get_focus()['file'].relative_to(cwd)))
+		except TypeError:
+			current_file = shlex.quote('')
+
+		current_tagged = ' '.join([shlex.quote(str(x.relative_to(cwd))) for x in self.screen.center.focus.get_tagged_files()])
+		if not current_tagged:
+			current_tagged = shlex.quote('')
+
+		if self.screen.center.focus == self.screen.left:
+			other = self.screen.right
+		else:
+			other = self.screen.left
+
+		other_cwd = str(other.cwd)
+
+		try:
+			other_file = shlex.quote(str(other.get_focus()['file']))
+		except AttributeError:
+			other_file = shlex.quote('')
+
+		other_tagged = ' '.join([shlex.quote(str(x)) for x in other.get_tagged_files()])
+		if not current_tagged:
+			other_tagged = shlex.quote('')
+
+		s = Template(self.edit.get_edit_text())
+		d = {
+			'f': current_file,
+			'd': shlex.quote(cwd),
+			's': current_tagged,
+			't': current_tagged,
+			'F': other_file,
+			'D': shlex.quote(other_cwd),
+			'S': other_tagged,
+			'T': other_tagged,
+		}
+
+		self.controller.loop.stop()
+		subprocess.run(s.safe_substitute(d), shell=True, cwd=cwd)
+		self.controller.loop.start()
+		os.kill(os.getpid(), signal.SIGWINCH)
+		self.controller.reload()
 

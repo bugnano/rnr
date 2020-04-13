@@ -38,7 +38,7 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 		self.source = urwid.Text(' ', layout=TildeLayout)
 		self.target = urwid.Text(' ', layout=TildeLayout)
 		self.progress_current = urwid.ProgressBar('dialog', 'progress')
-		self.time_current = urwid.Text(f'ETA {format_seconds(0)} ({human_readable_size(0)}/s)', layout=TildeLayout)
+		self.time_current = urwid.Text(f'{human_readable_size(0)}/{human_readable_size(0)} ETA {format_seconds(0)} ({human_readable_size(0)}/s)', layout=TildeLayout)
 		w = urwid.Columns([(1, urwid.Text('[')), self.progress_current, (1, urwid.Text(']'))])
 		w = urwid.Pile([
 			(1, urwid.Filler(urwid.Text('Source'))),
@@ -113,7 +113,7 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 
 			bps = info['cur_bytes'] / (info['cur_time'] or 1)
 			eta = max(int(round((info['cur_size'] - info['cur_bytes']) / (bps or 1))), 0)
-			self.time_current.set_text(f'ETA {format_seconds(eta)} ({human_readable_size(int(round(bps)))}/s)')
+			self.time_current.set_text(f'{human_readable_size(info["cur_bytes"])}/{human_readable_size(info["cur_size"])} ETA {format_seconds(eta)} ({human_readable_size(int(round(bps)))}/s)')
 			self.progress_current.set_completion(info['cur_bytes'])
 
 			self.divider.set_title(f'Total: {human_readable_size(info["bytes"])}/{human_readable_size(self.total_size)}')

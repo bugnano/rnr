@@ -64,7 +64,7 @@ from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
 from .dlg_error import DlgError
 from .dlg_question import DlgQuestion
 from .dlg_dirscan import DlgDirscan
-from .dirscan import dirscan
+from .rnr_dirscan import rnr_dirscan
 from .dlg_delete_progress import DlgDeleteProgress
 from .rnr_delete import rnr_delete
 from .dlg_report import DlgReport
@@ -322,6 +322,8 @@ class App(object):
 				self.screen.command_bar.tag_glob()
 			elif key in ('-', '\\'):
 				self.screen.command_bar.untag_glob()
+			elif key == '!':
+				self.screen.command_bar.shell()
 			elif key == 'f8':
 				tagged_files = self.screen.center.focus.get_tagged_files()
 				if tagged_files:
@@ -407,7 +409,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip)).start()
+		Thread(target=rnr_dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip)).start()
 
 	def on_delete(self, files, cwd):
 		self.close_dialog()
@@ -423,7 +425,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgDeleteProgress(self, len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish_delete, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgDeleteProgress(self, len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish_delete, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -435,7 +437,8 @@ class App(object):
 		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort)).start()
 
 	def on_finish_delete(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped):
-		if scan_error or error_list or scan_skipped or skipped_list:
+		warnings = [x for x in file_list if x['warning']]
+		if scan_error or error_list or scan_skipped or skipped_list or warnings:
 			self.screen.center.focus.force_focus()
 
 			dlg = DlgReport(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped)
@@ -455,11 +458,23 @@ class App(object):
 			path_dest = Path(os.path.normpath(path_cwd / path_dest))
 
 		if len(files) == 1:
-			pass
+			if path_dest.is_dir():
+				if (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
+					pass
+				else:
+					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+			else:
+				dest_parent = path_dest.parent
+				if not dest_parent.is_dir():
+					self.error(f'{str(Path(dest).parent)} is not a directory')
+				elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
+					pass
+				else:
+					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 		else:
 			if not path_dest.is_dir():
 				self.error(f'{dest} is not a directory')
-			elif path_cwd.resolve() == path_dest.resolve():
+			elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 				pass
 			else:
 				self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
@@ -474,7 +489,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['size'] for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish_copy, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish_copy, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -483,10 +498,11 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_copy, args=(file_list, cwd, dest, fd, q, ev_skip, ev_suspend, ev_abort)).start()
+		Thread(target=rnr_copy, args=(file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort)).start()
 
 	def on_finish_copy(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped):
-		if scan_error or error_list or scan_skipped or skipped_list:
+		warnings = [x for x in file_list if x['warning']]
+		if scan_error or error_list or scan_skipped or skipped_list or warnings:
 			self.screen.center.focus.force_focus()
 
 			dlg = DlgReport(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped)

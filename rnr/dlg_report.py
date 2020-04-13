@@ -45,8 +45,9 @@ class DlgReport(urwid.WidgetWrap):
 		l = []
 		l.extend([urwid.Columns([('pack', urwid.Text(f'ERROR [{x["error"]}]:', wrap='clip')), urwid.Text(str(Path(x['file']).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in scan_error])
 		l.extend([urwid.Columns([('pack', urwid.Text(f'ERROR [{x["error"]}]:', wrap='clip')), urwid.Text(str(Path(x['file']).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in error_list])
+		l.extend([urwid.Columns([('pack', urwid.Text(f'WARNING [{x["warning"]}]:', wrap='clip')), urwid.Text(str(Path(x['file']).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in file_list if x['warning']])
 		l.extend([urwid.Columns([('pack', urwid.Text('SKIPPED:', wrap='clip')), urwid.Text(str(Path(x).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in scan_skipped])
-		l.extend([urwid.Columns([('pack', urwid.Text('SKIPPED:', wrap='clip')), urwid.Text(str(Path(x).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in skipped_list])
+		l.extend([urwid.Columns([('pack', urwid.Text(f'SKIPPED [{x["why"]}]:', wrap='clip')), urwid.Text(str(Path(x['file']).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in skipped_list])
 		w = urwid.SimpleListWalker(l)
 		self.listbox = urwid.ListBox(w)
 		w = urwid.LineBox(urwid.Padding(self.listbox, left=1, right=1), 'Report', title_attr=title_attr, bline='')

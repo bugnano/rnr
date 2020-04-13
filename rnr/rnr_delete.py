@@ -85,7 +85,7 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 				finally:
 					os.close(parent_fd)
 
-				completed_list.append(file['file'])
+				completed_list.append({'file': file['file'], 'warning': ''})
 			except OSError as e:
 				if e.errno == errno.ENOENT:
 					pass
@@ -94,9 +94,9 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 		except AbortedError as e:
 			break
 		except SkippedError as e:
-			skipped_list.append(file['file'])
+			skipped_list.append({'file': file['file'], 'why': str(e)})
 
-		info['bytes'] += file['size']
+		info['bytes'] += file['lstat'].st_size
 		info['files'] += 1
 
 	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list})

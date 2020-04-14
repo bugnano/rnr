@@ -104,7 +104,6 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 	timers = {}
 
 	dir_stack = []
-
 	if not (dest.exists() and stat.S_ISDIR(dest.lstat().st_mode)):
 		cur_file = Path(file_list[0]['file'])
 		rel_file = cur_file.relative_to(cwd)
@@ -137,19 +136,17 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 			rel_file = cur_file.relative_to(cwd)
 			cur_target = dest / rel_file
 
+			(old_target, new_target) = (None, None)
 			while dir_stack:
 				(old_target, new_target) = dir_stack[-1]
 				if cur_target == old_target:
 					cur_target = new_target
-					debug_print(f'cur_target (1): {cur_target}')
 					break
 				elif old_target in cur_target.parents:
 					cur_target = Path(str(cur_target).replace(str(old_target), str(new_target)))
-					debug_print(f'cur_target (2): {cur_target}')
 					break
 				else:
 					dir_stack.pop()
-					debug_print(f'pop')
 
 			info['cur_source'] = str(rel_file)
 			info['cur_target'] = str(cur_target)
@@ -167,6 +164,7 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 				except OSError:
 					pass
 
+			when = ''
 			try:
 				parent_dir = cur_target.resolve().parent
 
@@ -179,28 +177,36 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 								raise SkippedError('Same file')
 
 							if target_is_dir:
+								when = 'rmdir'
 								os.rmdir(cur_target)
 								warning = f'Overwrite'
 							else:
+								when = 'remove'
 								os.remove(cur_target)
 								warning = f'Overwrite'
 					elif on_conflict == 'rename_existing':
 						if not (file['is_dir'] and target_is_dir):
+							existing_target = cur_target
+
 							i = 0
 							name = cur_target.name
-							existing_target = cur_target
 							while existing_target.exists():
 								new_name = f'{name}.rnrsave{i}'
 								existing_target = existing_target.parent / new_name
 								i += 1
 
+							when = 'rename'
 							os.rename(cur_target, existing_target)
 							warning = f'Renamed to {existing_target.name}'
 					elif on_conflict == 'rename_copy':
 						if not (file['is_dir'] and target_is_dir):
+							if cur_target == new_target:
+								existing_target = old_target
+							else:
+								existing_target = cur_target
+
 							i = 0
 							name = cur_target.name
-							existing_target = cur_target
 							while cur_target.exists():
 								new_name = f'{name}.rnrnew{i}'
 								cur_target = cur_target.parent / new_name
@@ -218,11 +224,14 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 
 				in_error = False
 				if file['is_symlink']:
+					when = 'symlink'
 					os.symlink(os.readlink(cur_file), cur_target)
 				elif file['is_dir']:
+					when = 'makedirs'
 					os.makedirs(cur_target, exist_ok=True)
 					dir_list.append({'file': file, 'target': cur_target})
 				elif file['is_file']:
+					when = 'copyfile'
 					rnr_copyfile(cur_file, cur_target, file['lstat'].st_size, block_size, info, timers, fd, q, ev_skip, ev_suspend, ev_abort)
 				else:
 					in_error = True
@@ -244,8 +253,10 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 							else:
 								raise
 
+						when = 'copystat'
 						shutil.copystat(cur_file, cur_target, follow_symlinks=False)
 
+					when = 'fsync'
 					parent_fd = os.open(parent_dir, 0)
 					try:
 						os.fsync(parent_fd)
@@ -254,7 +265,7 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 
 					completed_list.append({'file': file['file'], 'warning': warning})
 			except OSError as e:
-				error_list.append({'file': file['file'], 'error': f'{e.strerror} ({e.errno})'})
+				error_list.append({'file': file['file'], 'error': f'({when}) {e.strerror} ({e.errno})'})
 		except AbortedError as e:
 			break
 		except SkippedError as e:

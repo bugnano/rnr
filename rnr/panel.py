@@ -40,16 +40,16 @@ from .utils import (human_readable_size, format_date, TildeLayout, TLineWidget)
 from .debug_print import debug_print
 
 
-ReNumbers = re.compile(r'(\d+|\D+)')
+ReNumbers = re.compile(r'(\d+)')
 
 def try_int(s):
 	try:
 		return ('0', int(s))
-	except:
+	except ValueError:
 		return (s, 0)
 
 def natsort_key(s):
-	return [try_int(x.group(0)) for x in ReNumbers.finditer(unicodedata.normalize('NFKD', s.casefold()))]
+	return [try_int(x) for x in ReNumbers.split(unicodedata.normalize('NFKD', s.casefold()))]
 
 def sort_by_name(a, b, reverse=False):
 	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):

@@ -1,0 +1,130 @@
+RNR(1)
+======
+:doctype: manpage
+:man source: rnr
+:man manual: rnr manual
+
+
+== NAME
+rnr - Console file manager
+
+
+== SYNOPSIS
+*rnr* ['OPTIONS']
+
+
+== DESCRIPTION
+rnr(1) (RNR's Not Ranger) is a text based file manager that combines the best
+features of
+https://midnight-commander.org/[Midnight Commander] and
+https://ranger.github.io/[Ranger]
+
+
+== OPTIONS
+*-h, --help*::
+	Show command line options
+*-V, --version*::
+	Show program's version number and exit
+*-P* 'FILE'*, --printwd* 'FILE'::
+	Print last working directory to 'FILE'
+*-b, --nocolor*::
+	Requests to run in black and white
+*-d, --debug*::
+	Activate debug mode
+
+
+== KEY BINDINGS
+=== GENERAL
+*ESC*:: Return to normal mode (like Vim)
+*q, Q, F10*:: Exit
+*CTRL-R*:: Reload panels
+*TAB*:: Change active panel
+*ALT-I*:: Set the other panel to the current directory
+*ALT-O*:: Set the other panel to the highlited directory
+*F3*:: View file with the selected pager / Enter directory
+*F4*:: Edit file/directory with the selected editor
+*F7*:: Make directory
+
+=== PANEL
+*h, LEFT*:: Go to the parent directory
+*j, DOWN*:: Go to the next list element
+*k, UP*:: Go to the previous list element
+*l, RIGHT, ENTER*:: Enter directory / Open file with the selected opener
+*g, HOME*:: Go to the top of the list
+*G, END*:: Go to the bottom of the list
+*CTRL-B, PAGE UP*:: Go up a page in the list
+*CTRL-F, PAGE DOWN*:: Go down a page in the list
+*f, /*:: Filter list (fuzzy finder like https://github.com/junegunn/fzf[fzf])
+*BACKSPACE*:: Show/Hide hidden files
+
+=== SORTING
+*sn*:: Sort by Name
+*sN*:: Sort by Name (Reverse)
+*se*:: Sort by Extension
+*sE*:: Sort by Extension (Reverse)
+*sd*:: Sort by Date & Time
+*sD*:: Sort by Date & Time (Reverse)
+*ss*:: Sort by Size
+*sS*:: Sort by Size (Reverse)
+
+=== BOOKMARKS
+*m*'KEY':: Add current directory to the bookmark named 'KEY'
+*\'*'KEY':: Go to the bookmark named 'KEY'
+*''*:: Go to the previous directory (2 times ', not ")
+
+=== RENAME
+*r, c*:: Rename file (replace)
+*i, I*:: Rename file (insert)
+*a*:: Rename file (append before extension)
+*A*:: Rename file (append after extension)
+
+=== SELECT (TAG) FILES
+*INSERT, SPACE*:: Toggle tag on selected file
+**, v*:: Toggle tag on all files
+*+*:: Tag files that match the shell wildcard pattern
+*-, \*:: Untag files that match the shell wildcard pattern
+*uv*:: Untag all files
+
+=== OPERATIONS ON TAGGED FILES
+*F8*:: Delete tagged files (or selected file)
+*F5*:: Copy tagged files (or selected file)
+
+=== SHELL
+*!*:: Execute a shell command
+
+
+== SHELL SUBSTITUTIONS
+The following substitutions are available for the *!* command:
+
+'$f':: The current file
+'$d':: The current directory
+'$s, $t':: The tagged files
+'$F':: The file in the other panel
+'$D':: The directory of the other panel
+'$S, $T':: The tagged files of the other panel
+
+There is no need to enclose these substitutions in quotes
+
+=== EXAMPLE
+
+!**mpv** '$t':: Opens the tagged files with mpv
+
+== FILES
+rnr(1) respects the XDG Base Directory specification.
+If the '$XDG_CONFIG_HOME' environment variable is not set, the default
+'~/.config' directory will be used
+instead.
+
+'$XDG_CONFIG_HOME/rnr/config.py':: The rnr(1) configuration file
+'$XDG_CONFIG_HOME/rnr/bookmarks':: The currently saved bookmarks
+
+== RESOURCES
+GitHub: <https://github.com/bugnano/rnr>
+
+PyPI: <https://pypi.org/project/rnr/>
+
+
+== COPYING
+Copyright \(C) 2020 Franco Bugnano. Free use of this software is
+granted under the terms of the GNU General Public License (GPL).
+

@@ -28,7 +28,7 @@ from string import Template
 
 import urwid
 
-from .debug_print import debug_print
+from .debug_print import (debug_print, debug_pprint)
 
 
 class CmdEdit(urwid.Edit):
@@ -138,6 +138,9 @@ class CmdBar(urwid.WidgetWrap):
 			edit_pos = 0
 		elif mode == 'append_before':
 			edit_pos = len(file.stem)
+		elif mode == 'replace_before':
+			text = file.suffix
+			edit_pos = 0
 		else:
 			edit_pos = -1
 

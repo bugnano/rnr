@@ -106,8 +106,9 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 	dir_stack = []
 	skip_dir_stack = []
 
-	replace_first_path = False
-	if not (dest.exists() and stat.S_ISDIR(dest.lstat().st_mode)):
+	if dest.is_dir():
+		replace_first_path = False
+	else:
 		replace_first_path = True
 
 	total_bytes = 0
@@ -200,6 +201,9 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 								warning = f'Overwrite'
 					elif on_conflict == 'rename_existing':
 						if not (file['is_dir'] and target_is_dir):
+							if cur_file.resolve() == cur_target.resolve():
+								raise SkippedError('Same file')
+
 							i = 0
 							name = cur_target.name
 							existing_target = cur_target

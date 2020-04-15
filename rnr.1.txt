@@ -50,12 +50,13 @@ https://ranger.github.io/[Ranger]
 *h, LEFT*:: Go to the parent directory
 *j, DOWN*:: Go to the next list element
 *k, UP*:: Go to the previous list element
-*l, RIGHT, ENTER*:: Enter directory / Open file with the selected opener
+*l, RIGHT, ENTER*:: Enter directory / Follow symlink / Open file with the selected opener
 *g, HOME*:: Go to the top of the list
 *G, END*:: Go to the bottom of the list
 *CTRL-B, PAGE UP*:: Go up a page in the list
 *CTRL-F, PAGE DOWN*:: Go down a page in the list
 *f, /*:: Filter list (fuzzy finder like https://github.com/junegunn/fzf[fzf])
+*uf, u/*:: Remove filter from list
 *BACKSPACE*:: Show/Hide hidden files
 
 === SORTING
@@ -74,7 +75,8 @@ https://ranger.github.io/[Ranger]
 *''*:: Go to the previous directory (2 times ', not ")
 
 === RENAME
-*r, c*:: Rename file (replace)
+*r, cc, cw*:: Rename file (replace)
+*ce*:: Rename file (replace before extension)
 *i, I*:: Rename file (insert)
 *a*:: Rename file (append before extension)
 *A*:: Rename file (append after extension)

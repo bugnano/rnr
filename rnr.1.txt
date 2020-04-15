@@ -1,8 +1,9 @@
-RNR(1)
-======
+= RNR(1)
 :doctype: manpage
 :man source: rnr
+:man version: 1.0.0
 :man manual: rnr manual
+:revdate: 2020-04-14
 
 
 == NAME
@@ -25,7 +26,7 @@ https://ranger.github.io/[Ranger]
 	Show command line options
 *-V, --version*::
 	Show program's version number and exit
-*-P* 'FILE'*, --printwd* 'FILE'::
+*-P* 'FILE'**, --printwd** 'FILE'::
 	Print last working directory to 'FILE'
 *-b, --nocolor*::
 	Requests to run in black and white
@@ -68,8 +69,8 @@ https://ranger.github.io/[Ranger]
 *sS*:: Sort by Size (Reverse)
 
 === BOOKMARKS
-*m*'KEY':: Add current directory to the bookmark named 'KEY'
-*\'*'KEY':: Go to the bookmark named 'KEY'
+**m**'KEY':: Add current directory to the bookmark named 'KEY'
+**'**_KEY_:: Go to the bookmark named 'KEY'
 *''*:: Go to the previous directory (2 times ', not ")
 
 === RENAME
@@ -86,8 +87,9 @@ https://ranger.github.io/[Ranger]
 *uv*:: Untag all files
 
 === OPERATIONS ON TAGGED FILES
-*F8*:: Delete tagged files (or selected file)
 *F5*:: Copy tagged files (or selected file)
+*F6*:: Move tagged files (or selected file)
+*F8*:: Delete tagged files (or selected file)
 
 === SHELL
 *!*:: Execute a shell command
@@ -107,7 +109,7 @@ There is no need to enclose these substitutions in quotes
 
 === EXAMPLE
 
-!**mpv** '$t':: Opens the tagged files with mpv
+**!**mpv '$t':: Opens the tagged files with mpv
 
 == FILES
 rnr(1) respects the XDG Base Directory specification.
@@ -115,8 +117,16 @@ If the '$XDG_CONFIG_HOME' environment variable is not set, the default
 '~/.config' directory will be used
 instead.
 
-'$XDG_CONFIG_HOME/rnr/config.py':: The rnr(1) configuration file
-'$XDG_CONFIG_HOME/rnr/bookmarks':: The currently saved bookmarks
+'$XDG_CONFIG_HOME/rnr/config.py'::
+	The rnr(1) configuration file
+'$XDG_CONFIG_HOME/rnr/bookmarks'::
+	The currently saved bookmarks
+'/usr/share/rnr/rnr.fish'::
+	Copy this file to '~/.config/fish/functions/' to cd to the last directory
+	when using the fish shell
+'/usr/share/rnr/rnr.sh'::
+	Source this file in '~/.bashrc' to cd to the last directory when using
+	bash
 
 == RESOURCES
 GitHub: <https://github.com/bugnano/rnr>

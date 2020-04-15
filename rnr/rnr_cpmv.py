@@ -76,7 +76,7 @@ def rnr_copyfile(cur_file, cur_target, file_size, block_size, info, timers, fd, 
 		finally:
 			os.close(target_fd)
 
-def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort):
+def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort):
 	file_list = sorted(files, key=lambda x: x['file'])
 	error_list = []
 	skipped_list = []
@@ -104,12 +104,11 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 	timers = {}
 
 	dir_stack = []
-	if not (dest.exists() and stat.S_ISDIR(dest.lstat().st_mode)):
-		cur_file = Path(file_list[0]['file'])
-		rel_file = cur_file.relative_to(cwd)
-		cur_target = dest / rel_file
+	skip_dir_stack = []
 
-		dir_stack.append((cur_target, dest))
+	replace_first_path = False
+	if not (dest.exists() and stat.S_ISDIR(dest.lstat().st_mode)):
+		replace_first_path = True
 
 	total_bytes = 0
 	timers['start'] = time.monotonic()
@@ -133,17 +132,28 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 				raise SkippedError()
 
 			cur_file = Path(file['file'])
+
+			skip_dir = False
+			while skip_dir_stack:
+				dir_to_skip = skip_dir_stack[-1]
+				if dir_to_skip in cur_file.parents:
+					skip_dir = True
+					break
+				else:
+					skip_dir_stack.pop()
+
 			rel_file = cur_file.relative_to(cwd)
-			cur_target = dest / rel_file
+
+			if replace_first_path:
+				cur_target = dest / os.sep.join(rel_file.parts[1:])
+			else:
+				cur_target = dest / rel_file
 
 			(old_target, new_target) = (None, None)
 			while dir_stack:
 				(old_target, new_target) = dir_stack[-1]
-				if cur_target == old_target:
-					cur_target = new_target
-					break
-				elif old_target in cur_target.parents:
-					cur_target = Path(str(cur_target).replace(str(old_target), str(new_target)))
+				if old_target in cur_target.parents:
+					cur_target = Path(str(cur_target).replace(str(old_target), str(new_target), 1))
 					break
 				else:
 					dir_stack.pop()
@@ -164,11 +174,15 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 				except OSError:
 					pass
 
+			if skip_dir:
+				raise SkippedError('no_log')
+
 			when = ''
 			try:
 				parent_dir = cur_target.resolve().parent
 
 				warning = ''
+				target_is_dir = False
 				if cur_target.exists():
 					target_is_dir = stat.S_ISDIR(cur_target.lstat().st_mode)
 					if on_conflict == 'overwrite':
@@ -186,10 +200,9 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 								warning = f'Overwrite'
 					elif on_conflict == 'rename_existing':
 						if not (file['is_dir'] and target_is_dir):
-							existing_target = cur_target
-
 							i = 0
 							name = cur_target.name
+							existing_target = cur_target
 							while existing_target.exists():
 								new_name = f'{name}.rnrsave{i}'
 								existing_target = existing_target.parent / new_name
@@ -200,13 +213,9 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 							warning = f'Renamed to {existing_target.name}'
 					elif on_conflict == 'rename_copy':
 						if not (file['is_dir'] and target_is_dir):
-							if cur_target == new_target:
-								existing_target = old_target
-							else:
-								existing_target = cur_target
-
 							i = 0
 							name = cur_target.name
+							existing_target = cur_target
 							while cur_target.exists():
 								new_name = f'{name}.rnrnew{i}'
 								cur_target = cur_target.parent / new_name
@@ -222,54 +231,83 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 
 							raise SkippedError('Target exists')
 
-				in_error = False
-				if file['is_symlink']:
-					when = 'symlink'
-					os.symlink(os.readlink(cur_file), cur_target)
-				elif file['is_dir']:
-					when = 'makedirs'
-					os.makedirs(cur_target, exist_ok=True)
-					dir_list.append({'file': file, 'target': cur_target})
-				elif file['is_file']:
-					when = 'copyfile'
-					rnr_copyfile(cur_file, cur_target, file['lstat'].st_size, block_size, info, timers, fd, q, ev_skip, ev_suspend, ev_abort)
+				if (mode == 'mv') and not target_is_dir:
+					perform_copy = False
+					try:
+						os.rename(cur_file, cur_target)
+						if file['is_dir']:
+							skip_dir_stack.append(cur_file)
+					except OSError as e:
+						perform_copy = True
 				else:
-					in_error = True
-					error_list.append({'file': file['file'], 'error': f'Special file'})
+					perform_copy = True
 
-				if not in_error:
-					if not file['is_dir']:
+				in_error = False
+
+				if perform_copy:
+					if file['is_symlink']:
+						when = 'symlink'
+						os.symlink(os.readlink(cur_file), cur_target)
+					elif file['is_dir']:
+						when = 'makedirs'
+						os.makedirs(cur_target, exist_ok=True)
+						dir_list.append({'file': file, 'target': cur_target})
+					elif file['is_file']:
+						when = 'copyfile'
+						rnr_copyfile(cur_file, cur_target, file['lstat'].st_size, block_size, info, timers, fd, q, ev_skip, ev_suspend, ev_abort)
+					else:
+						in_error = True
+						error_list.append({'file': file['file'], 'error': f'Special file'})
+
+					if not in_error:
+						if not file['is_dir']:
+							try:
+								os.lchown(cur_target, file['lstat'].st_uid, file['lstat'].st_gid)
+							except OSError as e:
+								if e.errno == errno.EPERM:
+									try:
+										os.lchown(cur_target, -1, file['lstat'].st_gid)
+									except OSError as e:
+										if e.errno == errno.EPERM:
+											pass
+										else:
+											raise
+								else:
+									raise
+
+							when = 'copystat'
+							shutil.copystat(cur_file, cur_target, follow_symlinks=False)
+
+						when = 'fsync'
+						parent_fd = os.open(parent_dir, 0)
 						try:
-							os.lchown(cur_target, file['lstat'].st_uid, file['lstat'].st_gid)
-						except OSError as e:
-							if e.errno == errno.EPERM:
-								try:
-									os.lchown(cur_target, -1, file['lstat'].st_gid)
-								except OSError as e:
-									if e.errno == errno.EPERM:
-										pass
-									else:
-										raise
-							else:
-								raise
+							os.fsync(parent_fd)
+						finally:
+							os.close(parent_fd)
 
-						when = 'copystat'
-						shutil.copystat(cur_file, cur_target, follow_symlinks=False)
+				if (mode == 'mv') and not file['is_dir']:
+					if perform_copy:
+						when = 'remove'
+						os.remove(cur_file)
 
 					when = 'fsync'
-					parent_fd = os.open(parent_dir, 0)
+					parent_fd = os.open(cur_file.parent, 0)
 					try:
 						os.fsync(parent_fd)
 					finally:
 						os.close(parent_fd)
 
+				if not in_error:
 					completed_list.append({'file': file['file'], 'warning': warning})
 			except OSError as e:
 				error_list.append({'file': file['file'], 'error': f'({when}) {e.strerror} ({e.errno})'})
 		except AbortedError as e:
 			break
 		except SkippedError as e:
-			skipped_list.append({'file': file['file'], 'why': str(e)})
+			if str(e) == 'no_log':
+				completed_list.append({'file': file['file'], 'warning': ''})
+			else:
+				skipped_list.append({'file': file['file'], 'why': str(e)})
 
 		total_bytes += file['lstat'].st_size
 		info['bytes'] = total_bytes
@@ -313,6 +351,7 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 				except OSError:
 					pass
 
+			when = ''
 			try:
 				parent_dir = cur_target.resolve().parent
 
@@ -330,15 +369,28 @@ def rnr_copy(files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort
 					else:
 						raise
 
+				when = 'copystat'
 				shutil.copystat(cur_file, cur_target, follow_symlinks=False)
 
+				when = 'fsync'
 				parent_fd = os.open(parent_dir, 0)
 				try:
 					os.fsync(parent_fd)
 				finally:
 					os.close(parent_fd)
+
+				if mode == 'mv':
+					when = 'rmdir'
+					os.rmdir(cur_file)
+
+					when = 'fsync'
+					parent_fd = os.open(cur_file.parent, 0)
+					try:
+						os.fsync(parent_fd)
+					finally:
+						os.close(parent_fd)
 			except OSError as e:
-				error_list.append({'file': file['file'], 'error': f'{e.strerror} ({e.errno})'})
+				error_list.append({'file': file['file'], 'error': f'({when}) {e.strerror} ({e.errno})'})
 		except AbortedError as e:
 			break
 		except SkippedError as e:

@@ -389,12 +389,17 @@ class Panel(urwid.WidgetWrap):
 				obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid_cache[lstat.st_uid]} {gid_cache[lstat.st_gid]}'
 
 				if stat.S_ISLNK(lstat.st_mode):
-					link_target = os.readlink(file)
-					obj['details'] = f'{obj["details"]} -> {link_target}'
-					if Path(link_target).is_absolute():
-						obj['link_target'] = Path(os.path.normpath(link_target))
-					else:
-						obj['link_target'] = Path(os.path.normpath(file.parent / link_target))
+					try:
+						link_target = os.readlink(file)
+
+						obj['details'] = f'{obj["details"]} -> {link_target}'
+						if Path(link_target).is_absolute():
+							obj['link_target'] = Path(os.path.normpath(link_target))
+						else:
+							obj['link_target'] = Path(os.path.normpath(file.parent / link_target))
+					except (FileNotFoundError, PermissionError):
+						obj['details'] = f'{obj["details"]} -> ?'
+						obj['link_target'] = file
 				else:
 					obj['details'] = f'{obj["details"]} {file.name}'
 
@@ -463,17 +468,20 @@ class Panel(urwid.WidgetWrap):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
 		elif 'link_target' in file:
-			if file['link_target'].is_dir():
-				if file['link_target'] != self.cwd:
-					self.chdir(file['link_target'])
-			elif file['link_target'].parent.is_dir():
-				if file['link_target'].parent == self.cwd:
-					for (i, line) in enumerate(self.walker):
-						if line.model['file'] == file['link_target']:
-							self.walker.set_focus(i)
-							break
-				else:
-					self.chdir(file['link_target'].parent, file['link_target'])
+			try:
+				if file['link_target'].is_dir():
+					if file['link_target'] != self.cwd:
+						self.chdir(file['link_target'])
+				elif file['link_target'].exists():
+					if file['link_target'].parent == self.cwd:
+						for (i, line) in enumerate(self.walker):
+							if line.model['file'] == file['link_target']:
+								self.walker.set_focus(i)
+								break
+					else:
+						self.chdir(file['link_target'].parent, file['link_target'])
+			except (FileNotFoundError, PermissionError):
+				pass
 		else:
 			self.controller.loop.stop()
 			subprocess.run([self.controller.opener, file['file'].name], cwd=self.cwd)

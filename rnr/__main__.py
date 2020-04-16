@@ -496,27 +496,30 @@ class App(object):
 		if not path_dest.is_absolute():
 			path_dest = Path(os.path.normpath(path_cwd / path_dest))
 
-		if len(files) == 1:
-			if path_dest.is_dir():
-				if (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
-					pass
+		try:
+			if len(files) == 1:
+				if path_dest.is_dir():
+					if (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
+						pass
+					else:
+						self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 				else:
-					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+					dest_parent = path_dest.parent
+					if not dest_parent.is_dir():
+						self.error(f'{str(Path(dest).parent)} is not a directory')
+					elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
+						pass
+					else:
+						self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 			else:
-				dest_parent = path_dest.parent
-				if not dest_parent.is_dir():
-					self.error(f'{str(Path(dest).parent)} is not a directory')
+				if not path_dest.is_dir():
+					self.error(f'{dest} is not a directory')
 				elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
 					pass
 				else:
 					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
-		else:
-			if not path_dest.is_dir():
-				self.error(f'{dest} is not a directory')
-			elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
-				pass
-			else:
-				self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+		except (FileNotFoundError, PermissionError) as e:
+			self.error(f'{e.strerror} ({e.errno})')
 
 	def do_copy(self, file_list, error_list, skipped_list, cwd, dest, on_conflict):
 		self.screen.center.focus.force_focus()
@@ -547,27 +550,30 @@ class App(object):
 		if not path_dest.is_absolute():
 			path_dest = Path(os.path.normpath(path_cwd / path_dest))
 
-		if len(files) == 1:
-			if path_dest.is_dir():
-				if (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
-					pass
+		try:
+			if len(files) == 1:
+				if path_dest.is_dir():
+					if (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
+						pass
+					else:
+						self.do_dirscan(files, cwd, functools.partial(self.do_move, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 				else:
-					self.do_dirscan(files, cwd, functools.partial(self.do_move, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+					dest_parent = path_dest.parent
+					if not dest_parent.is_dir():
+						self.error(f'{str(Path(dest).parent)} is not a directory')
+					elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
+						pass
+					else:
+						self.do_dirscan(files, cwd, functools.partial(self.do_move, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 			else:
-				dest_parent = path_dest.parent
-				if not dest_parent.is_dir():
-					self.error(f'{str(Path(dest).parent)} is not a directory')
+				if not path_dest.is_dir():
+					self.error(f'{dest} is not a directory')
 				elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
 					pass
 				else:
 					self.do_dirscan(files, cwd, functools.partial(self.do_move, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
-		else:
-			if not path_dest.is_dir():
-				self.error(f'{dest} is not a directory')
-			elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'rename_existing', 'skip')):
-				pass
-			else:
-				self.do_dirscan(files, cwd, functools.partial(self.do_move, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+		except (FileNotFoundError, PermissionError) as e:
+			self.error(f'{e.strerror} ({e.errno})')
 
 	def do_move(self, file_list, error_list, skipped_list, cwd, dest, on_conflict):
 		self.screen.center.focus.force_focus()

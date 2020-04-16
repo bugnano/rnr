@@ -28,7 +28,7 @@ texts = [
 	'View',
 	'Edit',
 	'Copy',
-	'RenMov',
+	'Move',
 	'Mkdir',
 	'Delete',
 	' ', #'PullDn',

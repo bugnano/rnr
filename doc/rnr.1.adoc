@@ -1,9 +1,9 @@
 = RNR(1)
 :doctype: manpage
 :man source: rnr
-:man version: 1.0.0
+:man version: 0.1.0
 :man manual: rnr manual
-:revdate: 2020-04-14
+:revdate: 2020-04-16
 
 
 == NAME

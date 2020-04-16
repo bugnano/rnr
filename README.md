@@ -23,9 +23,9 @@ Its main goal is to be the most robust file copier in existence.
 
 ## Screenshots
 
-![ranger-like](doc/ranger-like.png)
+![ranger-like](https://raw.githubusercontent.com/bugnano/rnr/master/doc/ranger-like.png)
 
-![mc-like](doc/mc-like.png)
+![mc-like](https://raw.githubusercontent.com/bugnano/rnr/master/doc/mc-like.png)
 
 ## System requirements
 
@@ -61,7 +61,7 @@ The rnr man page can be invoked with the command:
 man rnr
 ```
 
-[Here is a text version of the man page](doc/rnr.1.adoc)
+[Here is a text version of the man page](https://github.com/bugnano/rnr/blob/master/doc/rnr.1.adoc)
 
 ## Non-Goals
 

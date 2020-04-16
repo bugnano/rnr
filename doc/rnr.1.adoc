@@ -11,7 +11,7 @@ rnr - Console file manager
 
 
 == SYNOPSIS
-*rnr* ['OPTIONS']
+*rnr* [_OPTIONS_]
 
 
 == DESCRIPTION
@@ -26,8 +26,8 @@ https://ranger.github.io/[Ranger]
 	Show command line options
 *-V, --version*::
 	Show program's version number and exit
-*-P* 'FILE'**, --printwd** 'FILE'::
-	Print last working directory to 'FILE'
+*-P* _FILE_**, --printwd** _FILE_::
+	Print last working directory to _FILE_
 *-b, --nocolor*::
 	Requests to run in black and white
 *-d, --debug*::
@@ -70,8 +70,8 @@ https://ranger.github.io/[Ranger]
 *sS*:: Sort by Size (Reverse)
 
 === BOOKMARKS
-**m**'KEY':: Add current directory to the bookmark named 'KEY'
-**'**_KEY_:: Go to the bookmark named 'KEY'
+**m**_KEY_:: Add current directory to the bookmark named _KEY_
+**'**_KEY_:: Go to the bookmark named _KEY_
 *''*:: Go to the previous directory (2 times ', not ")
 
 === RENAME
@@ -100,34 +100,34 @@ https://ranger.github.io/[Ranger]
 == SHELL SUBSTITUTIONS
 The following substitutions are available for the *!* command:
 
-'$f':: The current file
-'$d':: The current directory
-'$s, $t':: The tagged files
-'$F':: The file in the other panel
-'$D':: The directory of the other panel
-'$S, $T':: The tagged files of the other panel
+_$f_:: The current file
+_$d_:: The current directory
+_$s, $t_:: The tagged files
+_$F_:: The file in the other panel
+_$D_:: The directory of the other panel
+_$S, $T_:: The tagged files of the other panel
 
 There is no need to enclose these substitutions in quotes
 
 === EXAMPLE
 
-**!**mpv '$t':: Opens the tagged files with mpv
+**!**mpv _$t_:: Opens the tagged files with mpv
 
 == FILES
 rnr(1) respects the XDG Base Directory specification.
-If the '$XDG_CONFIG_HOME' environment variable is not set, the default
-'~/.config' directory will be used
+If the _$XDG_CONFIG_HOME_ environment variable is not set, the default
+_~/.config_ directory will be used
 instead.
 
-'$XDG_CONFIG_HOME/rnr/config.py'::
+_$XDG_CONFIG_HOME/rnr/config.py_::
 	The rnr(1) configuration file
-'$XDG_CONFIG_HOME/rnr/bookmarks'::
+_$XDG_CONFIG_HOME/rnr/bookmarks_::
 	The currently saved bookmarks
-'/usr/share/rnr/rnr.fish'::
-	Copy this file to '~/.config/fish/functions/' to cd to the last directory
+_/usr/share/rnr/rnr.fish_::
+	Copy this file to _~/.config/fish/functions/_ to cd to the last directory
 	when using the fish shell
-'/usr/share/rnr/rnr.sh'::
-	Source this file in '~/.bashrc' to cd to the last directory when using
+_/usr/share/rnr/rnr.sh_::
+	Source this file in _~/.bashrc_ to cd to the last directory when using
 	bash
 
 == RESOURCES

@@ -50,6 +50,7 @@ class DlgCpMv(urwid.WidgetWrap):
 		attr_btn_rename_existing = urwid.AttrMap(self.btn_rename_existing, 'dialog', 'dialog_focus')
 		self.btn_rename_copy = urwid.RadioButton(bgroup, 'Rename Copy')
 		attr_btn_rename_copy = urwid.AttrMap(self.btn_rename_copy, 'dialog', 'dialog_focus')
+		self.btn_rename_existing.set_state(True)
 		w = urwid.SimpleFocusListWalker([
 			label,
 			attr_btn_overwrite,

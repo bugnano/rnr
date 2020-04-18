@@ -386,7 +386,17 @@ class Panel(urwid.WidgetWrap):
 					obj['length'] = (length,)
 					obj['size'] = human_readable_size(length)
 
-				obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid_cache[lstat.st_uid]} {gid_cache[lstat.st_gid]}'
+				try:
+					uid = uid_cache[lstat.st_uid]
+				except KeyError:
+					uid = str(lstat.st_uid)
+
+				try:
+					gid = gid_cache[lstat.st_gid]
+				except KeyError:
+					gid = str(lstat.st_gid)
+
+				obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid} {gid}'
 
 				if stat.S_ISLNK(lstat.st_mode):
 					try:

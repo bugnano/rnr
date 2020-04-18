@@ -29,13 +29,17 @@ from pathlib import Path
 from .utils import (AbortedError, SkippedError)
 from .debug_print import (debug_print, debug_pprint)
 
+from .fallocate import *
+
 
 def rnr_copyfile(cur_file, cur_target, file_size, block_size, info, timers, fd, q, ev_skip, ev_suspend, ev_abort):
 	with open(cur_file, 'rb') as fh:
 		target_fd = os.open(cur_target, os.O_CREAT | os.O_WRONLY | os.O_TRUNC | os.O_EXCL | os.O_DSYNC, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
 		try:
-			if file_size > 0:
-				os.posix_fallocate(target_fd, 0, file_size)
+			try:
+				fallocate(target_fd, FALLOC_FL_KEEP_SIZE, 0, file_size)
+			except OSError:
+				pass
 
 			while True:
 				t1 = time.monotonic()

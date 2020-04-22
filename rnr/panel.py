@@ -319,7 +319,7 @@ class Panel(urwid.WidgetWrap):
 				obj = {
 					'file': file,
 					'key': natsort_key(file.name),
-					'extension': file.suffix.casefold(),
+					'extension': natsort_key(file.suffix),
 				}
 
 				try:

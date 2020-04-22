@@ -190,11 +190,12 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				target_is_dir = False
 				if cur_target.exists():
 					target_is_dir = stat.S_ISDIR(cur_target.lstat().st_mode)
-					if on_conflict == 'overwrite':
-						if not (file['is_dir'] and target_is_dir):
-							if cur_file.resolve() == cur_target.resolve():
+					if not (file['is_dir'] and target_is_dir):
+						if cur_file.resolve() == cur_target.resolve():
+							if (mode == 'mv') or (on_conflict not in ('rename_existing', 'rename_copy')):
 								raise SkippedError('Same file')
 
+						if on_conflict == 'overwrite':
 							if target_is_dir:
 								when = 'rmdir'
 								os.rmdir(cur_target)
@@ -203,11 +204,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 								when = 'remove'
 								os.remove(cur_target)
 								warning = f'Overwrite'
-					elif on_conflict == 'rename_existing':
-						if not (file['is_dir'] and target_is_dir):
-							if cur_file.resolve() == cur_target.resolve():
-								raise SkippedError('Same file')
-
+						elif on_conflict == 'rename_existing':
 							i = 0
 							name = cur_target.name
 							existing_target = cur_target
@@ -216,11 +213,13 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 								existing_target = existing_target.parent / new_name
 								i += 1
 
+							if cur_file.resolve() == cur_target.resolve():
+								cur_file = existing_target
+
 							when = 'rename'
 							os.rename(cur_target, existing_target)
 							warning = f'Renamed to {existing_target.name}'
-					elif on_conflict == 'rename_copy':
-						if not (file['is_dir'] and target_is_dir):
+						elif on_conflict == 'rename_copy':
 							i = 0
 							name = cur_target.name
 							existing_target = cur_target
@@ -232,11 +231,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 							warning = f'Renamed to {cur_target.name}'
 							if file['is_dir']:
 								dir_stack.append((existing_target, cur_target))
-					else:
-						if not (file['is_dir'] and target_is_dir):
-							if cur_file.resolve() == cur_target.resolve():
-								raise SkippedError('Same file')
-
+						else:
 							raise SkippedError('Target exists')
 
 				if (mode == 'mv') and not target_is_dir:
@@ -259,7 +254,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 					elif file['is_dir']:
 						when = 'makedirs'
 						os.makedirs(cur_target, exist_ok=True)
-						dir_list.append({'file': file, 'target': cur_target})
+						dir_list.append({'file': file, 'cur_file': cur_file, 'cur_target': cur_target})
 					elif file['is_file']:
 						when = 'copyfile'
 						rnr_copyfile(cur_file, cur_target, file['lstat'].st_size, block_size, info, timers, fd, q, ev_skip, ev_suspend, ev_abort)
@@ -340,8 +335,8 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				raise SkippedError()
 
 			file = entry['file']
-			cur_target = entry['target']
-			cur_file = Path(file['file'])
+			cur_target = entry['cur_target']
+			cur_file = entry['cur_file']
 			rel_file = cur_file.relative_to(cwd)
 			info['cur_source'] = str(rel_file)
 			info['cur_target'] = str(cur_target)

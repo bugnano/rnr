@@ -116,7 +116,7 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('mkdir', 'mkdir: ', '')
 
 	def do_mkdir(self):
-		new_dir = Path(self.edit.get_edit_text())
+		new_dir = Path(self.edit.get_edit_text()).expanduser()
 		if new_dir.is_absolute():
 			new_dir = Path(os.path.normpath(new_dir))
 		else:
@@ -124,7 +124,7 @@ class CmdBar(urwid.WidgetWrap):
 
 		try:
 			os.makedirs(new_dir, exist_ok=True)
-			self.controller.reload()
+			self.controller.reload(new_dir, only_focused=True)
 		except (PermissionError, FileExistsError) as e:
 			self.controller.error(f'{e.strerror} ({e.errno})')
 
@@ -147,7 +147,7 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('rename', 'rename: ', text, edit_pos)
 
 	def do_rename(self):
-		new_name = Path(self.edit.get_edit_text())
+		new_name = Path(self.edit.get_edit_text()).expanduser()
 		if new_name.is_absolute():
 			new_name = Path(os.path.normpath(new_name))
 		else:

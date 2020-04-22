@@ -2,8 +2,6 @@ import setuptools
 
 import subprocess
 
-from pathlib import Path
-
 from rnr import __version__
 
 with open('README.md', 'r') as fh:
@@ -12,7 +10,7 @@ with open('README.md', 'r') as fh:
 with open('requirements.txt', 'r') as fh:
 	requirements = [x.strip() for x in fh if x.strip()]
 
-subprocess.run(['a2x', '-f', 'manpage', str(Path(__file__).parent / 'doc/rnr.1.adoc')])
+subprocess.run(['a2x', '-f', 'manpage', 'doc/rnr.1.adoc'])
 
 setuptools.setup(
 	name='rnr',

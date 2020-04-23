@@ -76,6 +76,7 @@ from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 
 PALETTE = [
 	('default', 'default', 'default'),
+	('default_error', 'light red', 'default'),
 
 	('panel', PANEL_FG, PANEL_BG),
 	('reverse', REVERSE_FG, REVERSE_BG, 'standout'),
@@ -461,12 +462,12 @@ class App(object):
 
 		Thread(target=rnr_dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip)).start()
 
-	def on_finish(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped):
+	def on_finish(self, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped):
 		warnings = [x for x in file_list if x['warning']]
 		if scan_error or error_list or scan_skipped or skipped_list or warnings:
 			self.screen.center.focus.force_focus()
 
-			dlg = DlgReport(self, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped)
+			dlg = DlgReport(self, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped)
 			self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 				'center', ('relative', 75),
 				'middle', ('relative', 75),
@@ -476,9 +477,9 @@ class App(object):
 
 	def on_delete(self, files, cwd):
 		self.close_dialog()
-		self.do_dirscan(files, cwd, functools.partial(self.do_delete, cwd=cwd))
+		self.do_dirscan(files, cwd, functools.partial(self.do_delete, files=files, cwd=cwd))
 
-	def do_delete(self, file_list, error_list, skipped_list, cwd):
+	def do_delete(self, file_list, error_list, skipped_list, files, cwd):
 		self.screen.center.focus.force_focus()
 
 		q = Queue()
@@ -488,7 +489,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgDeleteProgress(self, len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgDeleteProgress(self, len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Delete', files=files, cwd=cwd, dest=None, scan_error=error_list, scan_skipped=skipped_list))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -503,7 +504,12 @@ class App(object):
 		self.close_dialog()
 
 		path_cwd = Path(cwd)
-		path_dest = Path(dest).expanduser()
+		path_dest = Path(dest)
+		try:
+			path_dest = path_dest.expanduser()
+		except RuntimeError:
+			pass
+
 		if not path_dest.is_absolute():
 			path_dest = Path(os.path.normpath(path_cwd / path_dest))
 
@@ -513,7 +519,7 @@ class App(object):
 					if (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 						pass
 					else:
-						self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 				else:
 					dest_parent = path_dest.parent
 					if not dest_parent.is_dir():
@@ -521,18 +527,18 @@ class App(object):
 					elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 						pass
 					else:
-						self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 			else:
 				if not path_dest.is_dir():
 					self.error(f'{dest} is not a directory')
 				elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 					pass
 				else:
-					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, files=files, dest=str(path_dest), on_conflict=on_conflict))
 		except (FileNotFoundError, PermissionError) as e:
 			self.error(f'{e.strerror} ({e.errno})')
 
-	def do_copy(self, file_list, error_list, skipped_list, cwd, dest, on_conflict):
+	def do_copy(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict):
 		self.screen.center.focus.force_focus()
 
 		q = Queue()
@@ -542,7 +548,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Copy', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -557,7 +563,12 @@ class App(object):
 		self.close_dialog()
 
 		path_cwd = Path(cwd)
-		path_dest = Path(dest).expanduser()
+		path_dest = Path(dest)
+		try:
+			path_dest = path_dest.expanduser()
+		except RuntimeError:
+			pass
+
 		if not path_dest.is_absolute():
 			path_dest = Path(os.path.normpath(path_cwd / path_dest))
 
@@ -567,7 +578,7 @@ class App(object):
 					if path_cwd.resolve() == path_dest.resolve():
 						pass
 					else:
-						self.do_dirscan(files, cwd, functools.partial(self.do_move, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 				else:
 					dest_parent = path_dest.parent
 					if not dest_parent.is_dir():
@@ -575,18 +586,18 @@ class App(object):
 					elif path_cwd.resolve() == path_dest.resolve():
 						pass
 					else:
-						self.do_dirscan(files, cwd, functools.partial(self.do_move, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 			else:
 				if not path_dest.is_dir():
 					self.error(f'{dest} is not a directory')
 				elif path_cwd.resolve() == path_dest.resolve():
 					pass
 				else:
-					self.do_dirscan(files, cwd, functools.partial(self.do_move, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+					self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
 		except (FileNotFoundError, PermissionError) as e:
 			self.error(f'{e.strerror} ({e.errno})')
 
-	def do_move(self, file_list, error_list, skipped_list, cwd, dest, on_conflict):
+	def do_move(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict):
 		self.screen.center.focus.force_focus()
 
 		q = Queue()
@@ -596,7 +607,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgCpMvProgress(self, 'Move', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, cwd=cwd, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgCpMvProgress(self, 'Move', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Move', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',

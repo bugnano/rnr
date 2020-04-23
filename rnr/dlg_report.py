@@ -23,15 +23,24 @@ from pathlib import Path
 
 import urwid
 
+from atomicwrites import atomic_write
+
 from .utils import (human_readable_size, format_seconds, TildeLayout)
+from .debug_print import (debug_print, debug_pprint)
 
 
 class DlgReport(urwid.WidgetWrap):
-	def __init__(self, controller, file_list, error_list, skipped_list, cwd, scan_error, scan_skipped):
+	def __init__(self, controller, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped):
 		self.controller = controller
 		self.file_list = file_list
 		self.error_list = error_list
 		self.skipped_list = skipped_list
+		self.operation = operation
+		self.files = files
+		self.cwd = cwd
+		self.dest = dest
+		self.scan_error = scan_error
+		self.scan_skipped = scan_skipped
 
 		if error_list or scan_error:
 			attr = 'error'
@@ -42,20 +51,24 @@ class DlgReport(urwid.WidgetWrap):
 			title_attr = 'dialog_title'
 			focus_attr = 'dialog_focus'
 
-		l = []
-		l.extend([urwid.Columns([('pack', urwid.Text(f'ERROR [{x["error"]}]:', wrap='clip')), urwid.Text(str(Path(x['file']).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in scan_error])
-		l.extend([urwid.Columns([('pack', urwid.Text(f'ERROR [{x["error"]}]:', wrap='clip')), urwid.Text(str(Path(x['file']).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in error_list])
-		l.extend([urwid.Columns([('pack', urwid.Text(f'WARNING [{x["warning"]}]:', wrap='clip')), urwid.Text(str(Path(x['file']).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in file_list if x['warning']])
-		l.extend([urwid.Columns([('pack', urwid.Text('SKIPPED:', wrap='clip')), urwid.Text(str(Path(x).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in scan_skipped])
-		l.extend([urwid.Columns([('pack', urwid.Text(f'SKIPPED [{x["why"]}]:', wrap='clip')), urwid.Text(str(Path(x['file']).relative_to(cwd)), layout=TildeLayout)], dividechars=1) for x in skipped_list])
+		self.messages = []
+		self.messages.extend([f'ERROR [{x["error"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in scan_error])
+		self.messages.extend([f'ERROR [{x["error"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in error_list])
+		self.messages.extend([f'WARNING [{x["warning"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in file_list if x['warning']])
+		self.messages.extend([f'SKIPPED: {str(Path(x).relative_to(cwd))}' for x in scan_skipped])
+		self.messages.extend([f'SKIPPED [{x["why"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in skipped_list])
+
+		l = [urwid.Text(x, layout=TildeLayout) for x in self.messages]
 		w = urwid.SimpleListWalker(l)
 		self.listbox = urwid.ListBox(w)
 		w = urwid.LineBox(urwid.Padding(self.listbox, left=1, right=1), 'Report', title_attr=title_attr, bline='')
 		top = urwid.Padding(w, left=1, right=1)
 
-		self.btn_ok = urwid.Button('OK', lambda x: self.on_ok())
-		attr_btn_ok = urwid.AttrMap(self.btn_ok, attr, focus_attr)
-		w = urwid.Columns([urwid.Divider(' '), (6, attr_btn_ok), urwid.Divider(' ')])
+		self.btn_close = urwid.Button('Close', lambda x: self.on_close())
+		attr_btn_close = urwid.AttrMap(self.btn_close, attr, focus_attr)
+		self.btn_save = urwid.Button('Save', lambda x: self.on_save())
+		attr_btn_save = urwid.AttrMap(self.btn_save, attr, focus_attr)
+		w = urwid.Columns([urwid.Divider(' '), (9, attr_btn_close), (1, urwid.Text(' ')), (8, attr_btn_save), urwid.Divider(' ')])
 		w = urwid.LineBox(urwid.Filler(w), tlcorner='├', trcorner='┤')
 		bottom = urwid.Padding(w, left=1, right=1)
 
@@ -81,8 +94,39 @@ class DlgReport(urwid.WidgetWrap):
 			self.listbox.keypress(size, 'page down')
 		elif key in ('k', 'up', 'ctrl b', 'page up'):
 			self.listbox.keypress(size, 'page up')
+		elif key in ('g', 'home'):
+			self.listbox.keypress(size, 'home')
+		elif key in ('G', 'end'):
+			self.listbox.keypress(size, 'end')
 
-	def on_ok(self):
+	def on_close(self):
 		self.controller.close_dialog()
+		self.controller.screen.command_bar.reset()
 		self.controller.reload()
+
+	def on_save(self):
+		self.controller.screen.command_bar.save(Path(self.cwd) / 'rnr-report.txt', self.do_save, forced_focus=False)
+
+	def do_save(self, file):
+		try:
+			with atomic_write(str(file)) as f:
+				f.write(f'Operation: {self.operation}\n')
+				f.write(f'From: {str(self.cwd)}\n')
+				if self.dest:
+					f.write(f'To: {str(self.dest)}\n')
+
+				f.write('Files:\n')
+				for file in self.files:
+					f.write(f'{str(file.relative_to(self.cwd))}\n')
+
+				f.write('\n')
+				f.write('------------------------------------------------------------------------------\n')
+				f.write('\n')
+
+				for message in self.messages:
+					f.write(f'{message}\n')
+
+			self.on_close()
+		except OSError as e:
+			self.controller.screen.command_bar.error(f'{e.strerror} ({e.errno})')
 

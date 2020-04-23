@@ -50,6 +50,8 @@ class CmdBar(urwid.WidgetWrap):
 		self.action = None
 		self.leader = ''
 		self.file = None
+		self.callback = None
+		self.forced_focus = False
 
 		self.edit = CmdEdit()
 
@@ -68,10 +70,14 @@ class CmdBar(urwid.WidgetWrap):
 		self.edit.set_caption('')
 		self.edit.set_edit_text('')
 		self.screen.pile.focus_position = 0
-		self.screen.center.focus.remove_force_focus()
+		if self.forced_focus:
+			self.screen.center.focus.remove_force_focus()
 
 		self.action = None
 		self.leader = ''
+		self.file = None
+		self.callback = None
+		self.forced_focus = False
 
 	def execute(self):
 		if self.action == 'mkdir':
@@ -84,6 +90,8 @@ class CmdBar(urwid.WidgetWrap):
 			self.do_untag_glob()
 		elif self.action == 'shell':
 			self.do_shell()
+		elif self.action == 'save':
+			self.do_save()
 
 		self.action = None
 		self.leader = ''
@@ -91,13 +99,24 @@ class CmdBar(urwid.WidgetWrap):
 		self.edit.set_caption('')
 		self.edit.set_edit_text('')
 		self.screen.pile.focus_position = 0
-		self.screen.center.focus.remove_force_focus()
+		if self.forced_focus:
+			self.screen.center.focus.remove_force_focus()
+
+		self.forced_focus = False
+
+		if self.callback:
+			file = self.file
+			callback = self.callback
+			self.file = None
+			self.callback = None
+			callback(file)
+
 
 	def set_leader(self, leader):
 		self.leader = leader
 		self.edit.set_caption(self.leader)
 
-	def prepare_action(self, action, caption, text, edit_pos=-1):
+	def prepare_action(self, action, caption, text, edit_pos=-1, forced_focus=True):
 		self.action = action
 		self.edit.set_caption(caption)
 		self.edit.set_edit_text(text)
@@ -106,7 +125,9 @@ class CmdBar(urwid.WidgetWrap):
 		else:
 			self.edit.set_edit_pos(edit_pos)
 		self.screen.pile.focus_position = 1
-		self.screen.center.focus.force_focus()
+		self.forced_focus = forced_focus
+		if self.forced_focus:
+			self.screen.center.focus.force_focus()
 
 	def filter(self):
 		self.prepare_action('filter', 'filter: ', self.screen.center.focus.file_filter)
@@ -116,7 +137,12 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('mkdir', 'mkdir: ', '')
 
 	def do_mkdir(self):
-		new_dir = Path(self.edit.get_edit_text()).expanduser()
+		new_dir = Path(self.edit.get_edit_text())
+		try:
+			new_dir = new_dir.expanduser()
+		except RuntimeError:
+			pass
+
 		if new_dir.is_absolute():
 			new_dir = Path(os.path.normpath(new_dir))
 		else:
@@ -147,7 +173,12 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('rename', 'rename: ', text, edit_pos)
 
 	def do_rename(self):
-		new_name = Path(self.edit.get_edit_text()).expanduser()
+		new_name = Path(self.edit.get_edit_text())
+		try:
+			new_name = new_name.expanduser()
+		except RuntimeError:
+			pass
+
 		if new_name.is_absolute():
 			new_name = Path(os.path.normpath(new_name))
 		else:
@@ -232,4 +263,29 @@ class CmdBar(urwid.WidgetWrap):
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
 		self.controller.reload()
+
+	def save(self, file, callback, forced_focus=True):
+		self.file = file
+		self.callback = callback
+		text = str(file)
+		edit_pos = len(str(file.parent))
+		self.prepare_action('save', 'save: ', text, edit_pos, forced_focus=forced_focus)
+
+	def do_save(self):
+		file = Path(self.edit.get_edit_text())
+		try:
+			file = file.expanduser()
+		except RuntimeError:
+			pass
+
+		if file.is_absolute():
+			file = Path(os.path.normpath(file))
+		else:
+			file = Path(os.path.normpath(self.file.parent / file))
+
+		self.file = file
+
+	def error(self, e):
+		self.edit.set_caption(('default_error', e))
+		self.edit.set_edit_text('')
 

@@ -30,8 +30,9 @@ from .debug_print import (debug_print, debug_pprint)
 
 
 class DlgReport(urwid.WidgetWrap):
-	def __init__(self, controller, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped):
+	def __init__(self, controller, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
 		self.controller = controller
+		self.command_bar = controller.screen.command_bar
 		self.file_list = file_list
 		self.error_list = error_list
 		self.skipped_list = skipped_list
@@ -41,6 +42,7 @@ class DlgReport(urwid.WidgetWrap):
 		self.dest = dest
 		self.scan_error = scan_error
 		self.scan_skipped = scan_skipped
+		self.job_id = job_id
 
 		if error_list or scan_error:
 			attr = 'error'
@@ -52,11 +54,11 @@ class DlgReport(urwid.WidgetWrap):
 			focus_attr = 'dialog_focus'
 
 		self.messages = []
-		self.messages.extend([f'ERROR [{x["error"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in scan_error])
+		self.messages.extend([f'ERROR (scan) [{x["error"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in scan_error])
+		self.messages.extend([f'SKIPPED (scan) []: {str(Path(x).relative_to(cwd))}' for x in scan_skipped])
 		self.messages.extend([f'ERROR [{x["error"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in error_list])
-		self.messages.extend([f'WARNING [{x["warning"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in file_list if x['warning']])
-		self.messages.extend([f'SKIPPED: {str(Path(x).relative_to(cwd))}' for x in scan_skipped])
 		self.messages.extend([f'SKIPPED [{x["why"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in skipped_list])
+		self.messages.extend([f'WARNING [{x["warning"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in file_list if x['warning']])
 
 		l = [urwid.Text(x, layout=TildeLayout) for x in self.messages]
 		w = urwid.SimpleListWalker(l)
@@ -101,11 +103,11 @@ class DlgReport(urwid.WidgetWrap):
 
 	def on_close(self):
 		self.controller.close_dialog()
-		self.controller.screen.command_bar.reset()
+		self.command_bar.reset()
 		self.controller.reload()
 
 	def on_save(self):
-		self.controller.screen.command_bar.save(Path(self.cwd) / 'rnr-report.txt', self.do_save, forced_focus=False)
+		self.command_bar.save(Path(self.cwd) / 'rnr-report.txt', self.do_save, forced_focus=False)
 
 	def do_save(self, file):
 		try:
@@ -128,5 +130,5 @@ class DlgReport(urwid.WidgetWrap):
 
 			self.on_close()
 		except OSError as e:
-			self.controller.screen.command_bar.error(f'{e.strerror} ({e.errno})')
+			self.command_bar.error(f'{e.strerror} ({e.errno})')
 

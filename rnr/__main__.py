@@ -33,6 +33,7 @@ import urwid
 
 import xdg.BaseDirectory
 
+DATA_DIR = Path(xdg.BaseDirectory.save_data_path('rnr'))
 CONFIG_DIR = Path(xdg.BaseDirectory.save_config_path('rnr'))
 
 sys.path.insert(0, str(CONFIG_DIR))
@@ -71,12 +72,13 @@ from .dlg_report import DlgReport
 from .dlg_cpmv import DlgCpMv
 from .dlg_cpmv_progress import DlgCpMvProgress
 from .rnr_cpmv import rnr_cpmv
+from .database import DataBase
 from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 
 
 PALETTE = [
 	('default', 'default', 'default'),
-	('default_error', 'light red', 'default'),
+	('default_error', 'light red', 'default', 'default,bold'),
 
 	('panel', PANEL_FG, PANEL_BG),
 	('reverse', REVERSE_FG, REVERSE_BG, 'standout'),
@@ -136,8 +138,14 @@ class Screen(urwid.WidgetWrap):
 
 
 class App(object):
-	def __init__(self, printwd, nocolor):
+	def __init__(self, printwd, dbfile, nocolor):
 		self.printwd = printwd
+
+		if dbfile == ':memory:':
+			self.dbfile = dbfile
+		else:
+			self.dbfile = str(Path(dbfile).resolve())
+
 		self.nocolor = nocolor
 
 		self.opener = OPENER
@@ -462,12 +470,12 @@ class App(object):
 
 		Thread(target=rnr_dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip)).start()
 
-	def on_finish(self, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped):
+	def on_finish(self, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
 		warnings = [x for x in file_list if x['warning']]
 		if scan_error or error_list or scan_skipped or skipped_list or warnings:
 			self.screen.center.focus.force_focus()
 
-			dlg = DlgReport(self, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped)
+			dlg = DlgReport(self, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id)
 			self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 				'center', ('relative', 75),
 				'middle', ('relative', 75),
@@ -482,6 +490,10 @@ class App(object):
 	def do_delete(self, file_list, error_list, skipped_list, files, cwd):
 		self.screen.center.focus.force_focus()
 
+		db = DataBase(self.dbfile)
+		job_id = db.new_job('Delete', file_list, error_list, skipped_list, files, cwd)
+		del db
+
 		q = Queue()
 		ev_skip = Event()
 		ev_suspend = Event()
@@ -489,7 +501,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgDeleteProgress(self, len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Delete', files=files, cwd=cwd, dest=None, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgDeleteProgress(self, len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Delete', files=files, cwd=cwd, dest=None, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -498,7 +510,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort)).start()
+		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile)).start()
 
 	def on_copy(self, files, cwd, dest, on_conflict):
 		self.close_dialog()
@@ -541,6 +553,10 @@ class App(object):
 	def do_copy(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict):
 		self.screen.center.focus.force_focus()
 
+		db = DataBase(self.dbfile)
+		job_id = db.new_job('Copy', file_list, error_list, skipped_list, files, cwd, dest, on_conflict)
+		del db
+
 		q = Queue()
 		ev_skip = Event()
 		ev_suspend = Event()
@@ -548,7 +564,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Copy', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Copy', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -557,7 +573,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort)).start()
+		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile)).start()
 
 	def on_move(self, files, cwd, dest, on_conflict):
 		self.close_dialog()
@@ -600,6 +616,10 @@ class App(object):
 	def do_move(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict):
 		self.screen.center.focus.force_focus()
 
+		db = DataBase(self.dbfile)
+		job_id = db.new_job('Move', file_list, error_list, skipped_list, files, cwd, dest, on_conflict)
+		del db
+
 		q = Queue()
 		ev_skip = Event()
 		ev_suspend = Event()
@@ -607,7 +627,7 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgCpMvProgress(self, 'Move', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Move', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list))
+		dlg = DlgCpMvProgress(self, 'Move', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Move', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -616,13 +636,14 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_cpmv, args=('mv', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort)).start()
+		Thread(target=rnr_cpmv, args=('mv', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile)).start()
 
 
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-V', '--version', action='version', version=f'%(prog)s {__version__}')
 	parser.add_argument('-P', '--printwd', help='Print last working directory to specified file', metavar='<file>')
+	parser.add_argument('-D', '--database', help='Specify database file to use (default: %(default)s)', metavar='<file>', default=str(DATA_DIR / 'rnr.db'))
 	parser.add_argument('-b', '--nocolor', help='Requests to run in black and white', action='store_true')
 	parser.add_argument('-d', '--debug', help='activate debug mode', action='store_true')
 	args = parser.parse_args()
@@ -630,7 +651,7 @@ def main():
 	if args.debug:
 		set_debug_fh(open(Path.home() / 'rnr.log', 'w', buffering=1))
 
-	app = App(args.printwd, args.nocolor)
+	app = App(args.printwd, args.database, args.nocolor)
 	app.run()
 
 

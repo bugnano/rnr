@@ -286,6 +286,6 @@ class CmdBar(urwid.WidgetWrap):
 		self.file = file
 
 	def error(self, e):
-		self.edit.set_caption(('default_error', e))
+		self.edit.set_caption(('default_error', f'ERROR: {e}'))
 		self.edit.set_edit_text('')
 

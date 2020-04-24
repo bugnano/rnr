@@ -1,9 +1,9 @@
 = RNR(1)
 :doctype: manpage
 :man source: rnr
-:man version: 0.1.0
+:man version: 0.2.0
 :man manual: rnr manual
-:revdate: 2020-04-16
+:revdate: 2020-04-24
 
 
 == NAME
@@ -28,6 +28,9 @@ https://ranger.github.io/[Ranger]
 	Show program's version number and exit
 *-P* _FILE_**, --printwd** _FILE_::
 	Print last working directory to _FILE_
+*-D* _FILE_**, --database** _FILE_::
+	Specify database file to use (default: _$XDG_DATA_HOME/rnr/rnr.db_)
+	If _FILE_ is the string _:memory:_ a fast, but volatile RAM based database is used.
 *-b, --nocolor*::
 	Requests to run in black and white
 *-d, --debug*::

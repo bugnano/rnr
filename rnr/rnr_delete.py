@@ -24,11 +24,14 @@ import errno
 
 from pathlib import Path
 
+from .database import DataBase
 from .utils import (AbortedError, SkippedError)
 from .debug_print import (debug_print, debug_pprint)
 
 
-def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
+def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
+	db = DataBase(dbfile)
+
 	file_list = sorted(files, key=lambda x: x['file'], reverse=True)
 	error_list = []
 	skipped_list = []
@@ -72,6 +75,8 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 					pass
 
 			try:
+				db.set_file_status(file, 'IN_PROGRESS')
+
 				parent_dir = Path(file['file']).resolve().parent
 
 				if file['is_dir']:
@@ -85,16 +90,22 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort):
 				finally:
 					os.close(parent_fd)
 
+				db.set_file_status(file, 'DONE', '')
 				completed_list.append({'file': file['file'], 'warning': ''})
 			except OSError as e:
 				if e.errno == errno.ENOENT:
-					pass
+					db.set_file_status(file, 'DONE', '')
+					completed_list.append({'file': file['file'], 'warning': ''})
 				else:
-					error_list.append({'file': file['file'], 'error': f'{e.strerror} ({e.errno})'})
+					message = f'{e.strerror} ({e.errno})'
+					db.set_file_status(file, 'ERROR', message)
+					error_list.append({'file': file['file'], 'error': message})
 		except AbortedError as e:
 			break
 		except SkippedError as e:
-			skipped_list.append({'file': file['file'], 'why': str(e)})
+			message = str(e)
+			db.set_file_status(file, 'SKIPPED', message)
+			skipped_list.append({'file': file['file'], 'why': message})
 
 		info['bytes'] += file['lstat'].st_size
 		info['files'] += 1

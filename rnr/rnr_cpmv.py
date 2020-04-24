@@ -26,6 +26,7 @@ import shutil
 
 from pathlib import Path
 
+from .database import DataBase
 from .utils import (AbortedError, SkippedError)
 from .debug_print import (debug_print, debug_pprint)
 
@@ -80,7 +81,9 @@ def rnr_copyfile(cur_file, cur_target, file_size, block_size, info, timers, fd, 
 		finally:
 			os.close(target_fd)
 
-def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort):
+def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
+	db = DataBase(dbfile)
+
 	file_list = sorted(files, key=lambda x: x['file'])
 	error_list = []
 	skipped_list = []
@@ -107,7 +110,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 	timers = {}
 
-	dir_stack = []
+	rename_dir_stack = []
 	skip_dir_stack = []
 
 	if dest.is_dir():
@@ -155,13 +158,13 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				cur_target = dest / rel_file
 
 			(old_target, new_target) = (None, None)
-			while dir_stack:
-				(old_target, new_target) = dir_stack[-1]
+			while rename_dir_stack:
+				(old_target, new_target) = rename_dir_stack[-1]
 				if old_target in cur_target.parents:
 					cur_target = Path(str(cur_target).replace(str(old_target), str(new_target), 1))
 					break
 				else:
-					dir_stack.pop()
+					rename_dir_stack.pop()
 
 			info['cur_source'] = str(rel_file)
 			info['cur_target'] = str(cur_target)
@@ -184,6 +187,8 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 			when = ''
 			try:
+				db.set_file_status(file, 'IN_PROGRESS')
+
 				parent_dir = cur_target.resolve().parent
 
 				warning = ''
@@ -230,7 +235,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 							warning = f'Renamed to {cur_target.name}'
 							if file['is_dir']:
-								dir_stack.append((existing_target, cur_target))
+								rename_dir_stack.append((existing_target, cur_target))
 						else:
 							raise SkippedError('Target exists')
 
@@ -260,7 +265,9 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 						rnr_copyfile(cur_file, cur_target, file['lstat'].st_size, block_size, info, timers, fd, q, ev_skip, ev_suspend, ev_abort)
 					else:
 						in_error = True
-						error_list.append({'file': file['file'], 'error': f'Special file'})
+						message = f'Special file'
+						db.set_file_status(file, 'ERROR', message)
+						error_list.append({'file': file['file'], 'error': message})
 
 					if not in_error:
 						if not file['is_dir']:
@@ -301,16 +308,22 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 						os.close(parent_fd)
 
 				if not in_error:
+					db.set_file_status(file, 'DONE', warning)
 					completed_list.append({'file': file['file'], 'warning': warning})
 			except OSError as e:
-				error_list.append({'file': file['file'], 'error': f'({when}) {e.strerror} ({e.errno})'})
+				message = f'({when}) {e.strerror} ({e.errno})'
+				db.set_file_status(file, 'ERROR', message)
+				error_list.append({'file': file['file'], 'error': message})
 		except AbortedError as e:
 			break
 		except SkippedError as e:
 			if str(e) == 'no_log':
+				db.set_file_status(file, 'DONE', '')
 				completed_list.append({'file': file['file'], 'warning': ''})
 			else:
-				skipped_list.append({'file': file['file'], 'why': str(e)})
+				message = str(e)
+				db.set_file_status(file, 'SKIPPED', message)
+				skipped_list.append({'file': file['file'], 'why': message})
 
 		total_bytes += file['lstat'].st_size
 		info['bytes'] = total_bytes
@@ -393,11 +406,15 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 					finally:
 						os.close(parent_fd)
 			except OSError as e:
-				error_list.append({'file': file['file'], 'error': f'({when}) {e.strerror} ({e.errno})'})
+				message = f'({when}) {e.strerror} ({e.errno})'
+				db.set_file_status(file, 'ERROR', message)
+				error_list.append({'file': file['file'], 'error': message})
 		except AbortedError as e:
 			break
 		except SkippedError as e:
-			skipped_list.append({'file': file['file'], 'why': str(e)})
+			message = str(e)
+			db.set_file_status(file, 'SKIPPED', message)
+			skipped_list.append({'file': file['file'], 'why': message})
 
 	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list})
 	try:

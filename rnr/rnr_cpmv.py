@@ -87,6 +87,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 	file_list = sorted(files, key=lambda x: x['file'])
 	error_list = []
 	skipped_list = []
+	aborted_list = []
 	completed_list = []
 	dir_list = []
 
@@ -121,7 +122,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 	total_bytes = 0
 	timers['start'] = time.monotonic()
 	timers['last_write'] = timers['start']
-	for file in file_list:
+	for i_file, file in enumerate(file_list):
 		try:
 			timers['cur_start'] = time.monotonic()
 
@@ -267,7 +268,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 						in_error = True
 						message = f'Special file'
 						db.set_file_status(file, 'ERROR', message)
-						error_list.append({'file': file['file'], 'error': message})
+						error_list.append({'file': file['file'], 'message': message})
 
 					if not in_error:
 						if not file['is_dir']:
@@ -309,21 +310,21 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 				if not in_error:
 					db.set_file_status(file, 'DONE', warning)
-					completed_list.append({'file': file['file'], 'warning': warning})
+					completed_list.append({'file': file['file'], 'message': warning})
 			except OSError as e:
 				message = f'({when}) {e.strerror} ({e.errno})'
 				db.set_file_status(file, 'ERROR', message)
-				error_list.append({'file': file['file'], 'error': message})
+				error_list.append({'file': file['file'], 'message': message})
 		except AbortedError as e:
 			break
 		except SkippedError as e:
 			if str(e) == 'no_log':
 				db.set_file_status(file, 'DONE', '')
-				completed_list.append({'file': file['file'], 'warning': ''})
+				completed_list.append({'file': file['file'], 'message': ''})
 			else:
 				message = str(e)
 				db.set_file_status(file, 'SKIPPED', message)
-				skipped_list.append({'file': file['file'], 'why': message})
+				skipped_list.append({'file': file['file'], 'message': message})
 
 		total_bytes += file['lstat'].st_size
 		info['bytes'] = total_bytes
@@ -408,15 +409,16 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 			except OSError as e:
 				message = f'({when}) {e.strerror} ({e.errno})'
 				db.set_file_status(file, 'ERROR', message)
-				error_list.append({'file': file['file'], 'error': message})
+				error_list.append({'file': file['file'], 'message': message})
 		except AbortedError as e:
+			aborted_list.extend([{'file': x['file'], 'message': ''} for x in file_list[i_file:]])
 			break
 		except SkippedError as e:
 			message = str(e)
 			db.set_file_status(file, 'SKIPPED', message)
-			skipped_list.append({'file': file['file'], 'why': message})
+			skipped_list.append({'file': file['file'], 'message': message})
 
-	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list})
+	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list, 'aborted': aborted_list})
 	try:
 		os.write(fd, b'\n')
 	except OSError:

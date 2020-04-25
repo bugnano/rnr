@@ -35,6 +35,8 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 		self.ev_abort = ev_abort
 		self.on_complete = on_complete
 
+		self.aborted = False
+
 		self.source = urwid.Text(' ', layout=TildeLayout)
 		self.target = urwid.Text(' ', layout=TildeLayout)
 		self.progress_current = urwid.ProgressBar('dialog', 'progress')
@@ -105,7 +107,7 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 			self.controller.close_dialog()
 			self.controller.abort.discard(self.ev_abort)
 			self.controller.suspend.discard(self.ev_suspend)
-			self.on_complete(info['result'], info['error'], info['skipped'])
+			self.on_complete(info['result'], info['error'], info['skipped'], info['aborted'])
 		else:
 			self.source.set_text(info['cur_source'])
 			self.target.set_text(info['cur_target'])
@@ -127,12 +129,18 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 		return retval
 
 	def on_skip(self):
+		if self.aborted:
+			return
+
 		self.ev_skip.set()
 
 		if not self.ev_suspend.is_set():
 			self.on_suspend()
 
 	def on_suspend(self):
+		if self.aborted:
+			return
+
 		if self.ev_suspend.is_set():
 			self.ev_suspend.clear()
 			self.btn_suspend.set_label('Continue')
@@ -141,14 +149,13 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 			self.btn_suspend.set_label('Suspend')
 
 	def on_abort(self):
+		if self.aborted:
+			return
+
 		self.ev_abort.set()
-		self.controller.abort.discard(self.ev_abort)
-		self.controller.suspend.discard(self.ev_suspend)
-		self.controller.close_dialog()
-		self.controller.reload()
 
 		if not self.ev_suspend.is_set():
 			self.on_suspend()
 
-		return False
+		self.aborted = True
 

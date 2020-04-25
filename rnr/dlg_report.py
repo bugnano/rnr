@@ -25,17 +25,19 @@ import urwid
 
 from atomicwrites import atomic_write
 
+from .database import DataBase
 from .utils import (human_readable_size, format_seconds, TildeLayout)
 from .debug_print import (debug_print, debug_pprint)
 
 
 class DlgReport(urwid.WidgetWrap):
-	def __init__(self, controller, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
+	def __init__(self, controller, file_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
 		self.controller = controller
 		self.command_bar = controller.screen.command_bar
 		self.file_list = file_list
 		self.error_list = error_list
 		self.skipped_list = skipped_list
+		self.aborted_list = aborted_list
 		self.operation = operation
 		self.files = files
 		self.cwd = cwd
@@ -44,7 +46,7 @@ class DlgReport(urwid.WidgetWrap):
 		self.scan_skipped = scan_skipped
 		self.job_id = job_id
 
-		if error_list or scan_error:
+		if scan_error or error_list or aborted_list:
 			attr = 'error'
 			title_attr = 'error_title'
 			focus_attr = 'error_focus'
@@ -54,11 +56,15 @@ class DlgReport(urwid.WidgetWrap):
 			focus_attr = 'dialog_focus'
 
 		self.messages = []
-		self.messages.extend([f'ERROR (scan) [{x["error"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in scan_error])
-		self.messages.extend([f'SKIPPED (scan) []: {str(Path(x).relative_to(cwd))}' for x in scan_skipped])
-		self.messages.extend([f'ERROR [{x["error"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in error_list])
-		self.messages.extend([f'SKIPPED [{x["why"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in skipped_list])
-		self.messages.extend([f'WARNING [{x["warning"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in file_list if x['warning']])
+		self.messages.extend([f'ERROR (scan) [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in scan_error])
+		self.messages.extend([f'SKIPPED (scan) [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in scan_skipped])
+		self.messages.extend([f'ERROR [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in error_list])
+		self.messages.extend([f'SKIPPED [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in skipped_list])
+		if aborted_list:
+			self.messages.extend([f'{("WARNING" if x["message"] else "DONE")} [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in file_list])
+			self.messages.extend([f'ABORTED [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in aborted_list])
+		else:
+			self.messages.extend([f'WARNING [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in file_list if x['message']])
 
 		l = [urwid.Text(x, layout=TildeLayout) for x in self.messages]
 		w = urwid.SimpleListWalker(l)
@@ -102,6 +108,10 @@ class DlgReport(urwid.WidgetWrap):
 			self.listbox.keypress(size, 'end')
 
 	def on_close(self):
+		db = DataBase(self.controller.dbfile)
+		db.delete_job(self.job_id)
+		del db
+
 		self.controller.close_dialog()
 		self.command_bar.reset()
 		self.controller.reload()

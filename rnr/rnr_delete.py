@@ -35,6 +35,7 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
 	file_list = sorted(files, key=lambda x: x['file'], reverse=True)
 	error_list = []
 	skipped_list = []
+	aborted_list = []
 	completed_list = []
 
 	info = {
@@ -48,7 +49,7 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
 
 	timers['start'] = time.monotonic()
 	timers['last_write'] = timers['start']
-	for file in file_list:
+	for i_file, file in enumerate(file_list):
 		try:
 			t1 = time.monotonic()
 			ev_suspend.wait()
@@ -91,26 +92,27 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
 					os.close(parent_fd)
 
 				db.set_file_status(file, 'DONE', '')
-				completed_list.append({'file': file['file'], 'warning': ''})
+				completed_list.append({'file': file['file'], 'message': ''})
 			except OSError as e:
 				if e.errno == errno.ENOENT:
 					db.set_file_status(file, 'DONE', '')
-					completed_list.append({'file': file['file'], 'warning': ''})
+					completed_list.append({'file': file['file'], 'message': ''})
 				else:
 					message = f'{e.strerror} ({e.errno})'
 					db.set_file_status(file, 'ERROR', message)
-					error_list.append({'file': file['file'], 'error': message})
+					error_list.append({'file': file['file'], 'message': message})
 		except AbortedError as e:
+			aborted_list.extend([{'file': x['file'], 'message': ''} for x in file_list[i_file:]])
 			break
 		except SkippedError as e:
 			message = str(e)
 			db.set_file_status(file, 'SKIPPED', message)
-			skipped_list.append({'file': file['file'], 'why': message})
+			skipped_list.append({'file': file['file'], 'message': message})
 
 		info['bytes'] += file['lstat'].st_size
 		info['files'] += 1
 
-	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list})
+	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list, 'aborted': aborted_list})
 	try:
 		os.write(fd, b'\n')
 	except OSError:

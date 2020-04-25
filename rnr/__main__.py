@@ -148,6 +148,9 @@ class App(object):
 
 		self.nocolor = nocolor
 
+		db = DataBase(self.dbfile)
+		del db
+
 		self.opener = OPENER
 		self.pager = PAGER
 		self.editor = EDITOR
@@ -470,17 +473,28 @@ class App(object):
 
 		Thread(target=rnr_dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip)).start()
 
-	def on_finish(self, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
-		warnings = [x for x in file_list if x['warning']]
-		if scan_error or error_list or scan_skipped or skipped_list or warnings:
+	def on_finish(self, file_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
+		db = DataBase(self.dbfile)
+		if aborted_list:
+			db.set_job_status(job_id, 'ABORTED')
+		else:
+			db.set_job_status(job_id, 'DONE')
+		del db
+
+		warnings = [x for x in file_list if x['message']]
+		if scan_error or error_list or scan_skipped or skipped_list or aborted_list or warnings:
 			self.screen.center.focus.force_focus()
 
-			dlg = DlgReport(self, file_list, error_list, skipped_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id)
+			dlg = DlgReport(self, file_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id)
 			self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 				'center', ('relative', 75),
 				'middle', ('relative', 75),
 			), self.screen.pile.options())
 		else:
+			db = DataBase(self.dbfile)
+			db.delete_job(job_id)
+			del db
+
 			self.reload()
 
 	def on_delete(self, files, cwd):

@@ -38,7 +38,7 @@ def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, last_writ
 			ev_skip.clear()
 			info['files'] = old_files
 			info['bytes'] = old_bytes
-			skipped_list.append(dir_)
+			skipped_list.append({'file': dir_, 'message': ''})
 			return False
 
 		try:
@@ -67,7 +67,7 @@ def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, last_writ
 				except OSError:
 					pass
 		except OSError as e:
-			errors.append({'file': file.path, 'error': f'{e.strerror} ({e.errno})'})
+			errors.append({'file': file.path, 'message': f'{e.strerror} ({e.errno})'})
 
 	file_list.extend(files)
 	error_list.extend(errors)
@@ -97,7 +97,7 @@ def rnr_dirscan(files, cwd, fd, q, ev_abort, ev_skip):
 			del skipped_list[:]
 			info['files'] = 0
 			info['bytes'] = 0
-			skipped_list.append(cwd)
+			skipped_list.append({'file': cwd, 'message': ''})
 			break
 
 		try:
@@ -125,7 +125,7 @@ def rnr_dirscan(files, cwd, fd, q, ev_abort, ev_skip):
 				except OSError:
 					pass
 		except OSError as e:
-			error_list.append({'file': str(file), 'error': f'{e.strerror} ({e.errno})'})
+			error_list.append({'file': str(file), 'message': f'{e.strerror} ({e.errno})'})
 
 	old_file_list = file_list[:]
 	if error_list:

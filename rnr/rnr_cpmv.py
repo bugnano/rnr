@@ -81,15 +81,15 @@ def rnr_copyfile(cur_file, cur_target, file_size, block_size, info, timers, fd, 
 		finally:
 			os.close(target_fd)
 
-def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
-	db = DataBase(dbfile)
+def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, dbfile, job_id):
+	if dbfile:
+		db = DataBase(dbfile)
 
 	file_list = sorted(files, key=lambda x: x['file'])
 	error_list = []
 	skipped_list = []
 	aborted_list = []
 	completed_list = []
-	dir_list = []
 
 	dest = Path(dest)
 
@@ -111,6 +111,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 	timers = {}
 
+	dir_list = []
 	rename_dir_stack = []
 	skip_dir_stack = []
 
@@ -141,7 +142,14 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				raise SkippedError()
 
 			cur_file = Path(file['file'])
+			rel_file = cur_file.relative_to(cwd)
 
+			if replace_first_path:
+				cur_target = dest / os.sep.join(rel_file.parts[1:])
+			else:
+				cur_target = dest / rel_file
+
+			skip_dir_stack_changed = False
 			skip_dir = False
 			while skip_dir_stack:
 				dir_to_skip = skip_dir_stack[-1]
@@ -150,14 +158,12 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 					break
 				else:
 					skip_dir_stack.pop()
+					skip_dir_stack_changed = True
 
-			rel_file = cur_file.relative_to(cwd)
+			if skip_dir_stack_changed and dbfile:
+				db.set_skip_dir_stack(job_id, skip_dir_stack)
 
-			if replace_first_path:
-				cur_target = dest / os.sep.join(rel_file.parts[1:])
-			else:
-				cur_target = dest / rel_file
-
+			rename_dir_stack_changed = False
 			(old_target, new_target) = (None, None)
 			while rename_dir_stack:
 				(old_target, new_target) = rename_dir_stack[-1]
@@ -166,6 +172,10 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 					break
 				else:
 					rename_dir_stack.pop()
+					rename_dir_stack_changed = True
+
+			if rename_dir_stack_changed and dbfile:
+				db.set_rename_dir_stack(job_id, rename_dir_stack)
 
 			info['cur_source'] = str(rel_file)
 			info['cur_target'] = str(cur_target)
@@ -188,7 +198,8 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 			when = ''
 			try:
-				db.set_file_status(file, 'IN_PROGRESS')
+				if dbfile:
+					db.set_file_status(file, 'IN_PROGRESS')
 
 				parent_dir = cur_target.resolve().parent
 
@@ -237,6 +248,8 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 							warning = f'Renamed to {cur_target.name}'
 							if file['is_dir']:
 								rename_dir_stack.append((existing_target, cur_target))
+								if dbfile:
+									db.set_rename_dir_stack(job_id, rename_dir_stack)
 						else:
 							raise SkippedError('Target exists')
 
@@ -246,6 +259,8 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 						os.rename(cur_file, cur_target)
 						if file['is_dir']:
 							skip_dir_stack.append(cur_file)
+							if dbfile:
+								db.set_skip_dir_stack(job_id, skip_dir_stack)
 					except OSError as e:
 						perform_copy = True
 				else:
@@ -261,14 +276,17 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 						when = 'makedirs'
 						os.makedirs(cur_target, exist_ok=True)
 						dir_list.append({'file': file, 'cur_file': cur_file, 'cur_target': cur_target})
+						if dbfile:
+							db.set_dir_list(job_id, dir_list)
 					elif file['is_file']:
 						when = 'copyfile'
 						rnr_copyfile(cur_file, cur_target, file['lstat'].st_size, block_size, info, timers, fd, q, ev_skip, ev_suspend, ev_abort)
 					else:
 						in_error = True
 						message = f'Special file'
-						db.set_file_status(file, 'ERROR', message)
 						error_list.append({'file': file['file'], 'message': message})
+						if dbfile:
+							db.set_file_status(file, 'ERROR', message)
 
 					if not in_error:
 						if not file['is_dir']:
@@ -309,22 +327,26 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 						os.close(parent_fd)
 
 				if not in_error:
-					db.set_file_status(file, 'DONE', warning)
 					completed_list.append({'file': file['file'], 'message': warning})
+					if dbfile:
+						db.set_file_status(file, 'DONE', warning)
 			except OSError as e:
 				message = f'({when}) {e.strerror} ({e.errno})'
-				db.set_file_status(file, 'ERROR', message)
 				error_list.append({'file': file['file'], 'message': message})
+				if dbfile:
+					db.set_file_status(file, 'ERROR', message)
 		except AbortedError as e:
 			break
 		except SkippedError as e:
 			if str(e) == 'no_log':
-				db.set_file_status(file, 'DONE', '')
 				completed_list.append({'file': file['file'], 'message': ''})
+				if dbfile:
+					db.set_file_status(file, 'DONE', '')
 			else:
 				message = str(e)
-				db.set_file_status(file, 'SKIPPED', message)
 				skipped_list.append({'file': file['file'], 'message': message})
+				if dbfile:
+					db.set_file_status(file, 'SKIPPED', message)
 
 		total_bytes += file['lstat'].st_size
 		info['bytes'] = total_bytes
@@ -408,15 +430,17 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 						os.close(parent_fd)
 			except OSError as e:
 				message = f'({when}) {e.strerror} ({e.errno})'
-				db.set_file_status(file, 'ERROR', message)
 				error_list.append({'file': file['file'], 'message': message})
+				if dbfile:
+					db.set_file_status(file, 'ERROR', message)
 		except AbortedError as e:
 			aborted_list.extend([{'file': x['file'], 'message': ''} for x in file_list[i_file:]])
 			break
 		except SkippedError as e:
 			message = str(e)
-			db.set_file_status(file, 'SKIPPED', message)
 			skipped_list.append({'file': file['file'], 'message': message})
+			if dbfile:
+				db.set_file_status(file, 'SKIPPED', message)
 
 	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list, 'aborted': aborted_list})
 	try:

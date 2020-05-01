@@ -108,9 +108,10 @@ class DlgReport(urwid.WidgetWrap):
 			self.listbox.keypress(size, 'end')
 
 	def on_close(self):
-		db = DataBase(self.controller.dbfile)
-		db.delete_job(self.job_id)
-		del db
+		if self.controller.dbfile:
+			db = DataBase(self.controller.dbfile)
+			db.delete_job(self.job_id)
+			del db
 
 		self.controller.close_dialog()
 		self.command_bar.reset()

@@ -29,8 +29,9 @@ from .utils import (AbortedError, SkippedError)
 from .debug_print import (debug_print, debug_pprint)
 
 
-def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
-	db = DataBase(dbfile)
+def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile, job_id):
+	if dbfile:
+		db = DataBase(dbfile)
 
 	file_list = sorted(files, key=lambda x: x['file'], reverse=True)
 	error_list = []
@@ -76,7 +77,8 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
 					pass
 
 			try:
-				db.set_file_status(file, 'IN_PROGRESS')
+				if dbfile:
+					db.set_file_status(file, 'IN_PROGRESS')
 
 				parent_dir = Path(file['file']).resolve().parent
 
@@ -91,23 +93,27 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile):
 				finally:
 					os.close(parent_fd)
 
-				db.set_file_status(file, 'DONE', '')
 				completed_list.append({'file': file['file'], 'message': ''})
+				if dbfile:
+					db.set_file_status(file, 'DONE', '')
 			except OSError as e:
 				if e.errno == errno.ENOENT:
-					db.set_file_status(file, 'DONE', '')
 					completed_list.append({'file': file['file'], 'message': ''})
+					if dbfile:
+						db.set_file_status(file, 'DONE', '')
 				else:
 					message = f'{e.strerror} ({e.errno})'
-					db.set_file_status(file, 'ERROR', message)
 					error_list.append({'file': file['file'], 'message': message})
+					if dbfile:
+						db.set_file_status(file, 'ERROR', message)
 		except AbortedError as e:
 			aborted_list.extend([{'file': x['file'], 'message': ''} for x in file_list[i_file:]])
 			break
 		except SkippedError as e:
 			message = str(e)
-			db.set_file_status(file, 'SKIPPED', message)
 			skipped_list.append({'file': file['file'], 'message': message})
+			if dbfile:
+				db.set_file_status(file, 'SKIPPED', message)
 
 		info['bytes'] += file['lstat'].st_size
 		info['files'] += 1

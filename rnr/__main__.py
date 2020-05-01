@@ -138,18 +138,21 @@ class Screen(urwid.WidgetWrap):
 
 
 class App(object):
-	def __init__(self, printwd, dbfile, nocolor):
+	def __init__(self, printwd, dbfile, monochrome):
 		self.printwd = printwd
 
-		if dbfile == ':memory:':
+		if not dbfile:
+			self.dbfile = None
+		elif dbfile == ':memory:':
 			self.dbfile = dbfile
 		else:
 			self.dbfile = str(Path(dbfile).resolve())
 
-		self.nocolor = nocolor
+		self.monochrome = monochrome
 
-		db = DataBase(self.dbfile)
-		del db
+		if self.dbfile:
+			db = DataBase(self.dbfile)
+			del db
 
 		self.opener = OPENER
 		self.pager = PAGER
@@ -167,7 +170,7 @@ class App(object):
 	def run(self):
 		self.loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=self.keypress)
 
-		if self.nocolor:
+		if self.monochrome:
 			self.loop.screen.set_terminal_properties(colors=1)
 
 		signal.signal(signal.SIGINT, self.signal_handler)
@@ -474,12 +477,13 @@ class App(object):
 		Thread(target=rnr_dirscan, args=(files, cwd, fd, q, ev_abort, ev_skip)).start()
 
 	def on_finish(self, file_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
-		db = DataBase(self.dbfile)
-		if aborted_list:
-			db.set_job_status(job_id, 'ABORTED')
-		else:
-			db.set_job_status(job_id, 'DONE')
-		del db
+		if self.dbfile:
+			db = DataBase(self.dbfile)
+			if aborted_list:
+				db.set_job_status(job_id, 'ABORTED')
+			else:
+				db.set_job_status(job_id, 'DONE')
+			del db
 
 		warnings = [x for x in file_list if x['message']]
 		if scan_error or error_list or scan_skipped or skipped_list or aborted_list or warnings:
@@ -491,9 +495,10 @@ class App(object):
 				'middle', ('relative', 75),
 			), self.screen.pile.options())
 		else:
-			db = DataBase(self.dbfile)
-			db.delete_job(job_id)
-			del db
+			if self.dbfile:
+				db = DataBase(self.dbfile)
+				db.delete_job(job_id)
+				del db
 
 			self.reload()
 
@@ -504,9 +509,12 @@ class App(object):
 	def do_delete(self, file_list, error_list, skipped_list, files, cwd):
 		self.screen.center.focus.force_focus()
 
-		db = DataBase(self.dbfile)
-		job_id = db.new_job('Delete', file_list, error_list, skipped_list, files, cwd)
-		del db
+		if self.dbfile:
+			db = DataBase(self.dbfile)
+			job_id = db.new_job('Delete', file_list, error_list, skipped_list, files, cwd)
+			del db
+		else:
+			job_id = None
 
 		q = Queue()
 		ev_skip = Event()
@@ -524,7 +532,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile)).start()
+		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile, job_id)).start()
 
 	def on_copy(self, files, cwd, dest, on_conflict):
 		self.close_dialog()
@@ -567,9 +575,12 @@ class App(object):
 	def do_copy(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict):
 		self.screen.center.focus.force_focus()
 
-		db = DataBase(self.dbfile)
-		job_id = db.new_job('Copy', file_list, error_list, skipped_list, files, cwd, dest, on_conflict)
-		del db
+		if self.dbfile:
+			db = DataBase(self.dbfile)
+			job_id = db.new_job('Copy', file_list, error_list, skipped_list, files, cwd, dest, on_conflict)
+			del db
+		else:
+			job_id = None
 
 		q = Queue()
 		ev_skip = Event()
@@ -587,7 +598,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile)).start()
+		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile, job_id)).start()
 
 	def on_move(self, files, cwd, dest, on_conflict):
 		self.close_dialog()
@@ -630,9 +641,12 @@ class App(object):
 	def do_move(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict):
 		self.screen.center.focus.force_focus()
 
-		db = DataBase(self.dbfile)
-		job_id = db.new_job('Move', file_list, error_list, skipped_list, files, cwd, dest, on_conflict)
-		del db
+		if self.dbfile:
+			db = DataBase(self.dbfile)
+			job_id = db.new_job('Move', file_list, error_list, skipped_list, files, cwd, dest, on_conflict)
+			del db
+		else:
+			job_id = None
 
 		q = Queue()
 		ev_skip = Event()
@@ -650,22 +664,28 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_cpmv, args=('mv', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile)).start()
+		Thread(target=rnr_cpmv, args=('mv', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile, job_id)).start()
 
 
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-V', '--version', action='version', version=f'%(prog)s {__version__}')
 	parser.add_argument('-P', '--printwd', help='Print last working directory to specified file', metavar='<file>')
-	parser.add_argument('-D', '--database', help='Specify database file to use (default: %(default)s)', metavar='<file>', default=str(DATA_DIR / 'rnr.db'))
-	parser.add_argument('-b', '--nocolor', help='Requests to run in black and white', action='store_true')
+	parser.add_argument('-D', '--database', help='Specify database file to use (default: %(default)s)', metavar='<file>', default=str(DATA_DIR / 'rnr.db'), dest='dbfile')
+	parser.add_argument('-n', '--nodb', help='Do not use database', action='store_false', dest='use_db')
+	parser.add_argument('-b', '--nocolor', help='Requests to run in black and white', action='store_true', dest='monochrome')
 	parser.add_argument('-d', '--debug', help='activate debug mode', action='store_true')
 	args = parser.parse_args()
 
 	if args.debug:
 		set_debug_fh(open(Path.home() / 'rnr.log', 'w', buffering=1))
 
-	app = App(args.printwd, args.database, args.nocolor)
+	if args.use_db:
+		dbfile = args.dbfile
+	else:
+		dbfile = None
+
+	app = App(args.printwd, dbfile, args.monochrome)
 	app.run()
 
 

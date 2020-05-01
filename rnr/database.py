@@ -170,3 +170,42 @@ class DataBase(object):
 		except sqlite3.OperationalError:
 			pass
 
+	def set_dir_list(self, job_id, dir_list):
+		if self.conn is None:
+			return
+
+		try:
+			with self.conn:
+				self.conn.execute('''UPDATE jobs SET dir_list = ? WHERE id = ?''', (
+					json.dumps([{'file': x['file'], 'cur_file': str(x['cur_file']), 'cur_target': str(x['cur_target'])} for x in dir_list]),
+					job_id,
+				))
+		except sqlite3.OperationalError:
+			pass
+
+	def set_rename_dir_stack(self, job_id, rename_dir_stack):
+		if self.conn is None:
+			return
+
+		try:
+			with self.conn:
+				self.conn.execute('''UPDATE jobs SET rename_dir_stack = ? WHERE id = ?''', (
+					json.dumps([list(map(str, x)) for x in rename_dir_stack]),
+					job_id,
+				))
+		except sqlite3.OperationalError:
+			pass
+
+	def set_skip_dir_stack(self, job_id, skip_dir_stack):
+		if self.conn is None:
+			return
+
+		try:
+			with self.conn:
+				self.conn.execute('''UPDATE jobs SET skip_dir_stack = ? WHERE id = ?''', (
+					json.dumps([str(x) for x in skip_dir_stack]),
+					job_id,
+				))
+		except sqlite3.OperationalError:
+			pass
+

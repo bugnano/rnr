@@ -31,6 +31,8 @@ https://ranger.github.io/[Ranger]
 *-D* _FILE_**, --database** _FILE_::
 	Specify database file to use (default: _$XDG_DATA_HOME/rnr/rnr.db_)
 	If _FILE_ is the string _:memory:_ a fast, but volatile RAM based database is used.
+*-n, --nodb*::
+	Do not use database (Takes precedence over *-D*)
 *-b, --nocolor*::
 	Requests to run in black and white
 *-d, --debug*::

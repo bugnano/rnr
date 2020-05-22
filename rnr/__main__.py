@@ -73,6 +73,7 @@ from .dlg_cpmv import DlgCpMv
 from .dlg_cpmv_progress import DlgCpMvProgress
 from .rnr_cpmv import rnr_cpmv
 from .database import DataBase
+from .dlg_pending_job import DlgPendingJob
 from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 
 
@@ -158,14 +159,18 @@ class App(object):
 		self.pager = PAGER
 		self.editor = EDITOR
 
+		self.loop = None
 		self.screen = Screen(self)
 		self.leader = ''
 		self.abort = set()
 		self.suspend = set()
+		self.pending_jobs = []
 
 		self.bookmarks = Bookmarks(CONFIG_DIR / 'bookmarks')
 		if 'h' not in self.bookmarks:
 			self.bookmarks['h'] = Path.home()
+
+		self.check_pending_jobs()
 
 	def run(self):
 		self.loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=self.keypress)
@@ -328,6 +333,10 @@ class App(object):
 					self.screen.right.chdir(cwd)
 			elif key == 'ctrl r':
 				self.reload()
+			elif key == 'ctrl u':
+				(self.screen.center.contents[0], self.screen.center.contents[1]) = (self.screen.center.contents[1], self.screen.center.contents[0])
+				self.screen.center.focus_position ^= 1
+				self.screen.update_focus()
 			elif key == 'f7':
 				self.screen.command_bar.mkdir(self.screen.center.focus.cwd)
 			elif key == 'c':
@@ -504,17 +513,15 @@ class App(object):
 
 	def on_delete(self, files, cwd):
 		self.close_dialog()
-		self.do_dirscan(files, cwd, functools.partial(self.do_delete, files=files, cwd=cwd))
+		self.do_dirscan(files, cwd, functools.partial(self.do_delete, files=files, cwd=cwd, job_id=None))
 
-	def do_delete(self, file_list, error_list, skipped_list, files, cwd):
+	def do_delete(self, file_list, error_list, skipped_list, files, cwd, job_id):
 		self.screen.center.focus.force_focus()
 
-		if self.dbfile:
+		if self.dbfile and (job_id is None):
 			db = DataBase(self.dbfile)
 			job_id = db.new_job('Delete', file_list, error_list, skipped_list, files, cwd)
 			del db
-		else:
-			job_id = None
 
 		q = Queue()
 		ev_skip = Event()
@@ -523,7 +530,8 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgDeleteProgress(self, len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Delete', files=files, cwd=cwd, dest=None, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
+		ev_nodb = Event()
+		dlg = DlgDeleteProgress(self, len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, ev_nodb, functools.partial(self.on_finish, operation='Delete', files=files, cwd=cwd, dest=None, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -532,7 +540,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile, job_id)).start()
+		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, ev_abort, ev_nodb, self.dbfile, job_id)).start()
 
 	def on_copy(self, files, cwd, dest, on_conflict):
 		self.close_dialog()
@@ -553,7 +561,7 @@ class App(object):
 					if (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 						pass
 					else:
-						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 				else:
 					dest_parent = path_dest.parent
 					if not dest_parent.is_dir():
@@ -561,26 +569,24 @@ class App(object):
 					elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 						pass
 					else:
-						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 			else:
 				if not path_dest.is_dir():
 					self.error(f'{dest} is not a directory')
 				elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 					pass
 				else:
-					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, files=files, dest=str(path_dest), on_conflict=on_conflict))
+					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, files=files, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 		except (FileNotFoundError, PermissionError) as e:
 			self.error(f'{e.strerror} ({e.errno})')
 
-	def do_copy(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict):
+	def do_copy(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict, job_id):
 		self.screen.center.focus.force_focus()
 
-		if self.dbfile:
+		if self.dbfile and (job_id is None):
 			db = DataBase(self.dbfile)
 			job_id = db.new_job('Copy', file_list, error_list, skipped_list, files, cwd, dest, on_conflict)
 			del db
-		else:
-			job_id = None
 
 		q = Queue()
 		ev_skip = Event()
@@ -589,7 +595,8 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Copy', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
+		ev_nodb = Event()
+		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, ev_nodb, functools.partial(self.on_finish, operation='Copy', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -598,7 +605,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile, job_id)).start()
+		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, ev_nodb, self.dbfile, job_id)).start()
 
 	def on_move(self, files, cwd, dest, on_conflict):
 		self.close_dialog()
@@ -619,7 +626,7 @@ class App(object):
 					if path_cwd.resolve() == path_dest.resolve():
 						pass
 					else:
-						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 				else:
 					dest_parent = path_dest.parent
 					if not dest_parent.is_dir():
@@ -627,26 +634,24 @@ class App(object):
 					elif path_cwd.resolve() == path_dest.resolve():
 						pass
 					else:
-						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 			else:
 				if not path_dest.is_dir():
 					self.error(f'{dest} is not a directory')
 				elif path_cwd.resolve() == path_dest.resolve():
 					pass
 				else:
-					self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict))
+					self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 		except (FileNotFoundError, PermissionError) as e:
 			self.error(f'{e.strerror} ({e.errno})')
 
-	def do_move(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict):
+	def do_move(self, file_list, error_list, skipped_list, files, cwd, dest, on_conflict, job_id):
 		self.screen.center.focus.force_focus()
 
-		if self.dbfile:
+		if self.dbfile and (job_id is None):
 			db = DataBase(self.dbfile)
 			job_id = db.new_job('Move', file_list, error_list, skipped_list, files, cwd, dest, on_conflict)
 			del db
-		else:
-			job_id = None
 
 		q = Queue()
 		ev_skip = Event()
@@ -655,7 +660,8 @@ class App(object):
 		self.suspend.add(ev_suspend)
 		ev_abort = Event()
 		self.abort.add(ev_abort)
-		dlg = DlgCpMvProgress(self, 'Move', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, functools.partial(self.on_finish, operation='Move', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
+		ev_nodb = Event()
+		dlg = DlgCpMvProgress(self, 'Move', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, ev_nodb, functools.partial(self.on_finish, operation='Move', files=files, cwd=cwd, dest=dest, scan_error=error_list, scan_skipped=skipped_list, job_id=job_id))
 		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
@@ -664,7 +670,28 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_cpmv, args=('mv', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, self.dbfile, job_id)).start()
+		Thread(target=rnr_cpmv, args=('mv', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, ev_nodb, self.dbfile, job_id)).start()
+
+	def check_pending_jobs(self):
+		if not self.dbfile:
+			return
+
+		db = DataBase(self.dbfile)
+		self.pending_jobs.extend(db.get_jobs())
+		del db
+
+		if self.pending_jobs:
+			self.show_next_pending_job()
+
+	def show_next_pending_job(self):
+		self.screen.center.focus.force_focus()
+
+		pending_job = self.pending_jobs.pop(0)
+		dlg = DlgPendingJob(self, pending_job)
+		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+			'center', ('relative', 75),
+			'middle', ('relative', 75),
+		), self.screen.pile.options())
 
 
 def main():

@@ -59,7 +59,7 @@ def recursive_dirscan(dir_, file_list, error_list, skipped_list, info, last_writ
 				files.append({'file': file.path, 'is_dir': False, 'is_symlink': False, 'is_file': file.is_file(), 'lstat': lstat})
 
 			now = time.monotonic()
-			if (now - last_write[0]) > 0.04:
+			if (now - last_write[0]) > 0.05:
 				last_write[0] = now
 				q.put(info.copy())
 				try:
@@ -117,7 +117,7 @@ def rnr_dirscan(files, cwd, fd, q, ev_abort, ev_skip):
 				file_list.append({'file': str(file), 'is_dir': False, 'is_symlink': False, 'is_file': file.is_file(), 'lstat': lstat})
 
 			now = time.monotonic()
-			if (now - last_write[0]) > 0.04:
+			if (now - last_write[0]) > 0.05:
 				last_write[0] = now
 				q.put(info.copy())
 				try:

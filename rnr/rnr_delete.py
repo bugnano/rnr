@@ -29,7 +29,7 @@ from .utils import (AbortedError, SkippedError)
 from .debug_print import (debug_print, debug_pprint)
 
 
-def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile, job_id):
+def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, ev_nodb, dbfile, job_id):
 	if dbfile:
 		db = DataBase(dbfile)
 
@@ -60,14 +60,22 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile, job_id):
 			if ev_abort.is_set():
 				raise AbortedError()
 
+			if dbfile and ev_nodb.is_set():
+				db.delete_job(job_id)
+				del db
+				dbfile = None
+
 			if ev_skip.is_set():
 				ev_skip.clear()
 				raise SkippedError()
 
+			if file['status'] in ('DONE', 'ERROR', 'SKIPPED'):
+				raise SkippedError('no_log')
+
 			info['current'] = file['file']
 
 			now = time.monotonic()
-			if (now - timers['last_write']) > 0.04:
+			if (now - timers['last_write']) > 0.05:
 				timers['last_write'] = now
 				info['time'] = int(round(now - timers['start']))
 				q.put(info.copy())
@@ -110,10 +118,15 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_abort, dbfile, job_id):
 			aborted_list.extend([{'file': x['file'], 'message': ''} for x in file_list[i_file:]])
 			break
 		except SkippedError as e:
-			message = str(e)
-			skipped_list.append({'file': file['file'], 'message': message})
-			if dbfile:
-				db.set_file_status(file, 'SKIPPED', message)
+			if str(e) == 'no_log':
+				completed_list.append({'file': file['file'], 'message': ''})
+				if dbfile:
+					db.set_file_status(file, 'DONE', '')
+			else:
+				message = str(e)
+				skipped_list.append({'file': file['file'], 'message': message})
+				if dbfile:
+					db.set_file_status(file, 'SKIPPED', message)
 
 		info['bytes'] += file['lstat'].st_size
 		info['files'] += 1

@@ -44,6 +44,7 @@ https://ranger.github.io/[Ranger]
 *ESC*:: Return to normal mode (like Vim)
 *q, Q, F10*:: Exit
 *CTRL-R*:: Reload panels
+*CTRL-U*:: Swap panels
 *TAB*:: Change active panel
 *ALT-I*:: Set the other panel to the current directory
 *ALT-O*:: Set the other panel to the highlited directory
@@ -105,18 +106,18 @@ https://ranger.github.io/[Ranger]
 == SHELL SUBSTITUTIONS
 The following substitutions are available for the *!* command:
 
-_$f_:: The current file
-_$d_:: The current directory
-_$s, $t_:: The tagged files
-_$F_:: The file in the other panel
-_$D_:: The directory of the other panel
-_$S, $T_:: The tagged files of the other panel
+_%f_:: The current file
+_%d_:: The current directory
+_%s, %t_:: The tagged files
+_%F_:: The file in the other panel
+_%D_:: The directory of the other panel
+_%S, %T_:: The tagged files of the other panel
 
 There is no need to enclose these substitutions in quotes
 
 === EXAMPLE
 
-**!**mpv _$t_:: Opens the tagged files with mpv
+**!**mpv _%t_:: Opens the tagged files with mpv
 
 == FILES
 rnr(1) respects the XDG Base Directory specification.

@@ -22,6 +22,8 @@ import os
 import sqlite3
 import json
 
+from pathlib import Path
+
 from .debug_print import (debug_print, debug_pprint)
 
 
@@ -183,6 +185,30 @@ class DataBase(object):
 		except sqlite3.OperationalError:
 			pass
 
+	def get_dir_list(self, job_id):
+		dir_list = []
+
+		if self.conn is None:
+			return dir_list
+
+		try:
+			with self.conn:
+				c = self.conn.execute('''SELECT dir_list FROM jobs WHERE id = ?''', (job_id,))
+				record = c.fetchone()[0]
+				c.close()
+
+				if record:
+					for file in json.loads(record):
+						file['cur_file'] = Path(file['cur_file'])
+						file['cur_target'] = Path(file['cur_target'])
+						file['file']['file'] = Path(file['file']['file'])
+						file['file']['lstat'] = os.stat_result(file['file']['lstat'])
+						dir_list.append(file)
+		except sqlite3.OperationalError:
+			pass
+
+		return dir_list
+
 	def set_rename_dir_stack(self, job_id, rename_dir_stack):
 		if self.conn is None:
 			return
@@ -196,6 +222,25 @@ class DataBase(object):
 		except sqlite3.OperationalError:
 			pass
 
+	def get_rename_dir_stack(self, job_id):
+		rename_dir_stack = []
+
+		if self.conn is None:
+			return rename_dir_stack
+
+		try:
+			with self.conn:
+				c = self.conn.execute('''SELECT rename_dir_stack FROM jobs WHERE id = ?''', (job_id,))
+				record = c.fetchone()[0]
+				c.close()
+
+				if record:
+					rename_dir_stack.extend(json.loads(record))
+		except sqlite3.OperationalError:
+			pass
+
+		return rename_dir_stack
+
 	def set_skip_dir_stack(self, job_id, skip_dir_stack):
 		if self.conn is None:
 			return
@@ -208,4 +253,62 @@ class DataBase(object):
 				))
 		except sqlite3.OperationalError:
 			pass
+
+	def get_skip_dir_stack(self, job_id):
+		skip_dir_stack = []
+
+		if self.conn is None:
+			return skip_dir_stack
+
+		try:
+			with self.conn:
+				c = self.conn.execute('''SELECT skip_dir_stack FROM jobs WHERE id = ?''', (job_id,))
+				record = c.fetchone()[0]
+				c.close()
+
+				if record:
+					skip_dir_stack.extend(json.loads(record))
+		except sqlite3.OperationalError:
+			pass
+
+		return skip_dir_stack
+
+	def get_jobs(self):
+		jobs = []
+
+		if self.conn is None:
+			return jobs
+
+		try:
+			with self.conn:
+				c = self.conn.execute('''SELECT * FROM jobs''')
+				jobs.extend(c.fetchall())
+				c.close()
+		except sqlite3.OperationalError:
+			pass
+
+		return jobs
+
+	def get_file_list(self, job_id):
+		file_list = []
+
+		if self.conn is None:
+			return file_list
+
+		try:
+			with self.conn:
+				c = self.conn.execute('''SELECT * FROM files WHERE job_id = ?''', (job_id,))
+				for row in c:
+					file = json.loads(row['file'])
+					file['id'] = row['id']
+					file['status'] = row['status']
+					file['lstat'] = os.stat_result(file['lstat'])
+
+					file_list.append(file)
+
+				c.close()
+		except sqlite3.OperationalError:
+			pass
+
+		return file_list
 

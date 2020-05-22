@@ -232,6 +232,9 @@ class Panel(urwid.WidgetWrap):
 		listbox = urwid.LineBox(self.listbox, tline='', bline='')
 		listbox = urwid.AttrMap(listbox, 'panel')
 
+		txt_loading = urwid.LineBox(urwid.Filler(urwid.Text('Loading...'), valign='top'), tline='', bline='')
+		self.txt_loading = urwid.AttrMap(txt_loading, 'panel')
+
 		self.details_separator = TLineWidget(urwid.Text('─', layout=TildeLayout))
 		details_separator = urwid.AttrMap(self.details_separator, 'panel')
 
@@ -242,7 +245,7 @@ class Panel(urwid.WidgetWrap):
 		self.footer = TLineWidget(urwid.Text('', layout=TildeLayout), title_align='right', lcorner='└', rcorner='┘')
 		footer = urwid.AttrMap(self.footer, 'panel')
 
-		w = urwid.Pile([('pack', title), listbox, ('pack', details_separator), ('pack', details), ('pack', footer)])
+		self.pile = urwid.Pile([('pack', title), listbox, ('pack', details_separator), ('pack', details), ('pack', footer)])
 
 		cwd = Path.cwd()
 		self.old_cwd = cwd
@@ -260,7 +263,7 @@ class Panel(urwid.WidgetWrap):
 		self.chdir(cwd)
 		self.walker.set_focus(0)
 
-		super().__init__(w)
+		super().__init__(self.pile)
 
 	def chdir(self, cwd, focus_path=None):
 		self.title.set_title(f' {str(cwd)} ')
@@ -310,11 +313,19 @@ class Panel(urwid.WidgetWrap):
 	def _reload(self, cwd, focus_path, focus_position=0):
 		cwd = Path(cwd)
 
+		listbox = self.pile.contents[1]
+		self.pile.contents[1] = (self.txt_loading, self.pile.options())
+		if self.controller.loop:
+			self.controller.loop.draw_screen()
+
+		self.pile.contents[1] = listbox
+
 		uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
 		gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
 
 		files = []
 		try:
+
 			for file in cwd.iterdir():
 				obj = {
 					'file': file,

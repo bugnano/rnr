@@ -25,7 +25,7 @@ from .utils import (human_readable_size, format_seconds, TildeLayout)
 
 
 class DlgCpMvProgress(urwid.WidgetWrap):
-	def __init__(self, controller, title, num_files, total_size, q, ev_skip, ev_suspend, ev_abort, on_complete):
+	def __init__(self, controller, title, num_files, total_size, q, ev_skip, ev_suspend, ev_abort, ev_nodb, on_complete):
 		self.controller = controller
 		self.num_files = num_files
 		self.total_size = total_size
@@ -33,6 +33,7 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 		self.ev_skip = ev_skip
 		self.ev_suspend = ev_suspend
 		self.ev_abort = ev_abort
+		self.ev_nodb = ev_nodb
 		self.on_complete = on_complete
 
 		self.aborted = False
@@ -71,7 +72,9 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 		attr_btn_suspend = urwid.AttrMap(self.btn_suspend, 'dialog', 'dialog_focus')
 		self.btn_abort = urwid.Button('Abort', lambda x: self.on_abort())
 		attr_btn_abort = urwid.AttrMap(self.btn_abort, 'dialog', 'dialog_focus')
-		w = urwid.Columns([urwid.Divider(' '), (8, attr_btn_skip), (1, urwid.Text(' ')), (12, attr_btn_suspend), (1, urwid.Text(' ')), (9, attr_btn_abort), urwid.Divider(' ')])
+		self.btn_nodb = urwid.Button('No DB', lambda x: self.on_nodb())
+		attr_btn_nodb = urwid.AttrMap(self.btn_nodb, 'dialog', 'dialog_focus')
+		w = urwid.Columns([urwid.Divider(' '), (8, attr_btn_skip), (1, urwid.Text(' ')), (12, attr_btn_suspend), (1, urwid.Text(' ')), (9, attr_btn_abort), (1, urwid.Text(' ')), (9, attr_btn_nodb), urwid.Divider(' ')])
 		w = urwid.LineBox(urwid.Filler(w), tlcorner='├', trcorner='┤')
 		bottom = urwid.Padding(w, left=1, right=1)
 
@@ -158,4 +161,7 @@ class DlgCpMvProgress(urwid.WidgetWrap):
 			self.on_suspend()
 
 		self.aborted = True
+
+	def on_nodb(self):
+		self.ev_nodb.set()
 

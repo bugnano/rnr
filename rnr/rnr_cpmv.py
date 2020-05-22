@@ -69,7 +69,7 @@ def rnr_copyfile(cur_file, cur_target, file_size, block_size, info, timers, fd, 
 				info['cur_bytes'] += bytes_written
 				info['bytes'] += bytes_written
 				now = time.monotonic()
-				if (now - timers['last_write']) > 0.04:
+				if (now - timers['last_write']) > 0.05:
 					timers['last_write'] = now
 					info['cur_time'] = int(round(now - timers['cur_start']))
 					info['time'] = int(round(now - timers['start']))
@@ -81,7 +81,7 @@ def rnr_copyfile(cur_file, cur_target, file_size, block_size, info, timers, fd, 
 		finally:
 			os.close(target_fd)
 
-def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, dbfile, job_id):
+def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_abort, ev_nodb, dbfile, job_id):
 	if dbfile:
 		db = DataBase(dbfile)
 
@@ -111,9 +111,14 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 	timers = {}
 
-	dir_list = []
-	rename_dir_stack = []
-	skip_dir_stack = []
+	if dbfile:
+		dir_list = db.get_dir_list(job_id)
+		rename_dir_stack = db.get_rename_dir_stack(job_id)
+		skip_dir_stack = db.get_skip_dir_stack(job_id)
+	else:
+		dir_list = []
+		rename_dir_stack = []
+		skip_dir_stack = []
 
 	if dest.is_dir():
 		replace_first_path = False
@@ -137,9 +142,17 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 			if ev_abort.is_set():
 				raise AbortedError()
 
+			if dbfile and ev_nodb.is_set():
+				db.delete_job(job_id)
+				del db
+				dbfile = None
+
 			if ev_skip.is_set():
 				ev_skip.clear()
 				raise SkippedError()
+
+			if file['status'] in ('DONE', 'ERROR', 'SKIPPED'):
+				raise SkippedError('no_log')
 
 			cur_file = Path(file['file'])
 			rel_file = cur_file.relative_to(cwd)
@@ -183,7 +196,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 			info['cur_bytes'] = 0
 
 			now = time.monotonic()
-			if (now - timers['last_write']) > 0.04:
+			if (now - timers['last_write']) > 0.05:
 				timers['last_write'] = now
 				info['cur_time'] = int(round(now - timers['cur_start']))
 				info['time'] = int(round(now - timers['start']))
@@ -366,6 +379,11 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 			if ev_abort.is_set():
 				raise AbortedError()
 
+			if dbfile and ev_nodb.is_set():
+				db.delete_job(job_id)
+				del db
+				dbfile = None
+
 			if ev_skip.is_set():
 				ev_skip.clear()
 				raise SkippedError()
@@ -380,7 +398,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 			info['cur_bytes'] = 0
 
 			now = time.monotonic()
-			if (now - timers['last_write']) > 0.04:
+			if (now - timers['last_write']) > 0.05:
 				timers['last_write'] = now
 				info['cur_time'] = int(round(now - timers['cur_start']))
 				info['time'] = int(round(now - timers['start']))

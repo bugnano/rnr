@@ -115,7 +115,11 @@ class DlgReport(urwid.WidgetWrap):
 
 		self.controller.close_dialog()
 		self.command_bar.reset()
-		self.controller.reload()
+
+		if self.controller.pending_jobs:
+			self.controller.show_next_pending_job()
+		else:
+			self.controller.reload()
 
 	def on_save(self):
 		self.command_bar.save(Path(self.cwd) / 'rnr-report.txt', self.do_save, forced_focus=False)

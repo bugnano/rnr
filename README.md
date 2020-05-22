@@ -63,6 +63,54 @@ man rnr
 
 [Here is a text version of the man page](https://github.com/bugnano/rnr/blob/master/doc/rnr.1.adoc)
 
+## Robust file copy
+
+File copying looks like a simple operation, but there are many cases where it could go wrong.
+
+To better understand the situation, let me tell you a couple of stories:
+
+You have several big, multi-gigabyte files that you need to copy from one hard
+drive to another.  This operation is very time consuming, so you start the
+copy process in the evening, and let it run overnight.
+
+The next day, you wake up, and see that the copy process is stuck at 10% and
+you see a window prompting you what to do, as there already is a file with the
+same name in the destination directory (or an error has occurred during the
+copy, and the program is asking you if you want to continue or abort).
+
+Result: you wasted almost the whole night, as the copy process was waiting for
+your input.
+
+Now imagine instead that you wake up and see that your computer shows an empty
+desktop because the power went down in the night.
+
+Result: The copy process has been interrupted and you have no idea which files
+have been copied and which files not.
+
+> There must be a better way! - Raymond Hettinger
+
+So rnr addresses these problems in 2 ways:
+
+1. The copy operation is completely non-interactive, the action to be done in
+   case of conflict is decided before the copy process starts. Once the copy
+   process starts, all the conflicts are handled automatically, and all the
+   errors are skipped. At the end of the process, you will see a report window
+   that shows all the actions taken by the copy engine (for example
+   renaming/overwriting a file, or skipping a file due to an error). The
+   report can be saved to a text file, and analized as required.
+2. Every file operation is logged to a on-disk database, so when the power
+   goes off (and it will...), you will know where the copy process was at, and
+   resume from that.
+
+Now, let's address the elephant in the room: The on-disk database slows down
+operations considerably in the case of many small files.
+
+While rnr defaults to using a database file, it is in fact optional, and can
+be disabled by a command line switch, or by the "No DB" button.
+
+Of course, everything said about the file copy is applied to the file move
+operation as well.
+
 ## Non-Goals
 
 * Transfer Speed: In the speed/reliability tradeoff it will choose reliability first.

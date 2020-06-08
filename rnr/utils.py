@@ -21,6 +21,8 @@ import os
 
 import datetime
 
+from pathlib import Path
+
 import urwid
 
 
@@ -55,6 +57,21 @@ def format_seconds(t):
 	else:
 		return f'{hours:02d}:{minutes:02d}:{seconds:02d}'
 
+def tar_stem(file):
+	p = Path(file)
+	suffixes = p.suffixes
+	if (len(suffixes) >= 2) and (suffixes[-2].lower() == '.tar'):
+		return Path(p.stem).stem
+	else:
+		return p.stem
+
+def tar_suffix(file):
+	p = Path(file)
+	suffixes = p.suffixes
+	if (len(suffixes) >= 2) and (suffixes[-2].lower() == '.tar'):
+		return ''.join(suffixes[-2:])
+	else:
+		return p.suffix
 
 class TildeTextLayout(urwid.TextLayout):
 	def layout(self, text, width, align, wrap):
@@ -103,6 +120,9 @@ class TLineWidget(urwid.WidgetWrap):
 
 	def set_title_attr(self, attr):
 		self.title_attr.set_attr_map({None: attr})
+
+class InterruptError(Exception):
+	pass
 
 class AbortedError(Exception):
 	pass

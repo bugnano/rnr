@@ -43,6 +43,7 @@ class DlgPendingJob(urwid.WidgetWrap):
 		focus_attr = 'dialog_focus'
 
 		self.messages = [
+			f'Status: {pending_job["status"]}',
 			f'Operation: {pending_job["operation"]}',
 			f'From: {str(pending_job["cwd"])}',
 		]
@@ -109,24 +110,41 @@ class DlgPendingJob(urwid.WidgetWrap):
 		else:
 			file_list = []
 
-		error_list = json.loads(self.pending_job['scan_error'])
-		skipped_list = json.loads(self.pending_job['scan_skipped'])
+		scan_error = json.loads(self.pending_job['scan_error'])
+		scan_skipped = json.loads(self.pending_job['scan_skipped'])
 		files = json.loads(self.pending_job['files'])
 		cwd = self.pending_job['cwd']
 		dest = self.pending_job['dest']
 		on_conflict = self.pending_job['on_conflict']
+		operation = self.pending_job['operation']
 
-		if self.pending_job['operation'] == 'Delete':
-			self.controller.do_delete(file_list, error_list, skipped_list, files, cwd, job_id)
-		elif self.pending_job['operation'] == 'Copy':
-			self.controller.do_copy(file_list, error_list, skipped_list, files, cwd, dest, on_conflict, job_id)
-		elif self.pending_job['operation'] == 'Move':
-			self.controller.do_move(file_list, error_list, skipped_list, files, cwd, dest, on_conflict, job_id)
-		else:
-			if self.controller.pending_jobs:
-				self.controller.show_next_pending_job()
+		if self.pending_job['status'] in ('ABORTED', 'DONE'):
+			if operation == 'Delete':
+				file_list.sort(key=lambda x: x['file'], reverse=True)
 			else:
-				self.controller.reload()
+				file_list.sort(key=lambda x: x['file'])
+
+			error_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'ERROR']
+			skipped_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'SKIPPED']
+			completed_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'DONE']
+			if self.pending_job['status'] == 'ABORTED':
+				aborted_list = [{'file': x['file'], 'message': (x['message'] or '')} for x in file_list if x['status'] not in ('DONE', 'ERROR', 'SKIPPED')]
+			else:
+				aborted_list = []
+
+			self.controller.on_finish(completed_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id)
+		else:
+			if operation == 'Delete':
+				self.controller.do_delete(file_list, scan_error, scan_skipped, files, cwd, job_id)
+			elif operation == 'Copy':
+				self.controller.do_copy(file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id)
+			elif operation == 'Move':
+				self.controller.do_move(file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id)
+			else:
+				if self.controller.pending_jobs:
+					self.controller.show_next_pending_job()
+				else:
+					self.controller.reload()
 
 	def on_skip(self):
 		self.controller.close_dialog()

@@ -36,7 +36,7 @@ import urwid
 
 from fuzzyfinder import fuzzyfinder
 
-from .utils import (human_readable_size, format_date, TildeLayout, TLineWidget)
+from .utils import (human_readable_size, format_date, tar_stem, tar_suffix, TildeLayout, TLineWidget)
 from .debug_print import (debug_print, debug_pprint)
 
 
@@ -285,7 +285,7 @@ class Panel(urwid.WidgetWrap):
 	def reload(self, focus_path=None):
 		files_to_discard = []
 		for file in self.tagged_files:
-			if not file.exists():
+			if not os.path.lexists(file):
 				files_to_discard.append(file)
 
 		for file in files_to_discard:
@@ -330,7 +330,7 @@ class Panel(urwid.WidgetWrap):
 				obj = {
 					'file': file,
 					'key': natsort_key(file.name),
-					'extension': natsort_key(file.suffix),
+					'extension': natsort_key(tar_suffix(file)),
 				}
 
 				try:
@@ -493,7 +493,7 @@ class Panel(urwid.WidgetWrap):
 				if file['link_target'].is_dir():
 					if file['link_target'] != self.cwd:
 						self.chdir(file['link_target'])
-				elif file['link_target'].exists():
+				elif os.path.lexists(file['link_target']):
 					if file['link_target'].parent == self.cwd:
 						for (i, line) in enumerate(self.walker):
 							if line.model['file'] == file['link_target']:

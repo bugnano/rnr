@@ -51,6 +51,7 @@ class DataBase(object):
 						dir_list TEXT,
 						rename_dir_stack TEXT,
 						skip_dir_stack TEXT,
+						replace_first_path INTEGER,
 						status TEXT NOT NULL
 					);
 
@@ -76,7 +77,7 @@ class DataBase(object):
 		except sqlite3.OperationalError:
 			pass
 
-	def new_job(self, operation, file_list, error_list, skipped_list, files, cwd, dest=None, on_conflict=None):
+	def new_job(self, operation, file_list, scan_error, scan_skipped, files, cwd, dest=None, on_conflict=None):
 		job_id = None
 
 		if self.conn is None:
@@ -88,15 +89,16 @@ class DataBase(object):
 				job_id = c.fetchone()[0] or 0
 				job_id += 1
 				c.close()
-				self.conn.execute('''INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+				self.conn.execute('''INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
 					job_id,
 					operation,
 					json.dumps([str(x) for x in files]),
 					cwd,
 					dest,
 					on_conflict,
-					json.dumps(error_list),
-					json.dumps(skipped_list),
+					json.dumps(scan_error),
+					json.dumps(scan_skipped),
+					None,
 					None,
 					None,
 					None,
@@ -125,6 +127,28 @@ class DataBase(object):
 
 		return job_id
 
+	def update_file(self, file, status=None):
+		if self.conn is None:
+			return
+
+		try:
+			with self.conn:
+				if status is not None:
+					self.conn.execute('''UPDATE files SET file = ?, status = ? WHERE id = ?''', (
+						json.dumps(file),
+						status,
+						file['id'],
+					))
+
+					file['status'] = status
+				else:
+					self.conn.execute('''UPDATE files SET file = ? WHERE id = ?''', (
+						json.dumps(file),
+						file['id'],
+					))
+		except sqlite3.OperationalError:
+			pass
+
 	def set_file_status(self, file, status, message=None):
 		if self.conn is None:
 			return
@@ -144,6 +168,8 @@ class DataBase(object):
 					))
 
 				file['status'] = status
+				if message is not None:
+					file['message'] = message
 		except sqlite3.OperationalError:
 			pass
 
@@ -178,8 +204,15 @@ class DataBase(object):
 
 		try:
 			with self.conn:
+				l = []
+				for x in dir_list:
+					file = x.copy()
+					file.update({'file': x['file'].copy(), 'cur_file': str(x['cur_file']), 'cur_target': str(x['cur_target'])})
+					file['file']['file'] = str(x['file']['file'])
+					l.append(file)
+
 				self.conn.execute('''UPDATE jobs SET dir_list = ? WHERE id = ?''', (
-					json.dumps([{'file': x['file'], 'cur_file': str(x['cur_file']), 'cur_target': str(x['cur_target'])} for x in dir_list]),
+					json.dumps(l),
 					job_id,
 				))
 		except sqlite3.OperationalError:
@@ -235,7 +268,8 @@ class DataBase(object):
 				c.close()
 
 				if record:
-					rename_dir_stack.extend(json.loads(record))
+					for old_target, new_target in json.loads(record):
+						rename_dir_stack.append((Path(old_target), Path(new_target)))
 		except sqlite3.OperationalError:
 			pass
 
@@ -267,11 +301,41 @@ class DataBase(object):
 				c.close()
 
 				if record:
-					skip_dir_stack.extend(json.loads(record))
+					for dir_to_skip in json.loads(record):
+						skip_dir_stack.append(Path(dir_to_skip))
 		except sqlite3.OperationalError:
 			pass
 
 		return skip_dir_stack
+
+	def set_replace_first_path(self, job_id, replace_first_path):
+		if self.conn is None:
+			return
+
+		try:
+			with self.conn:
+				self.conn.execute('''UPDATE jobs SET replace_first_path = ? WHERE id = ?''', (
+					replace_first_path,
+					job_id,
+				))
+		except sqlite3.OperationalError:
+			pass
+
+	def get_replace_first_path(self, job_id):
+		replace_first_path = None
+
+		if self.conn is None:
+			return replace_first_path
+
+		try:
+			with self.conn:
+				c = self.conn.execute('''SELECT replace_first_path FROM jobs WHERE id = ?''', (job_id,))
+				replace_first_path = c.fetchone()[0]
+				c.close()
+		except sqlite3.OperationalError:
+			pass
+
+		return replace_first_path
 
 	def get_jobs(self):
 		jobs = []
@@ -302,6 +366,7 @@ class DataBase(object):
 					file = json.loads(row['file'])
 					file['id'] = row['id']
 					file['status'] = row['status']
+					file['message'] = row['message']
 					file['lstat'] = os.stat_result(file['lstat'])
 
 					file_list.append(file)

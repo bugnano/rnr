@@ -28,6 +28,7 @@ from pathlib import Path
 
 import urwid
 
+from .utils import (tar_stem, tar_suffix)
 from .debug_print import (debug_print, debug_pprint)
 
 
@@ -167,9 +168,9 @@ class CmdBar(urwid.WidgetWrap):
 		elif mode == 'insert':
 			edit_pos = 0
 		elif mode == 'append_before':
-			edit_pos = len(file.stem)
+			edit_pos = len(tar_stem(file))
 		elif mode == 'replace_before':
-			text = file.suffix
+			text = tar_suffix(file)
 			edit_pos = 0
 		else:
 			edit_pos = -1
@@ -189,7 +190,7 @@ class CmdBar(urwid.WidgetWrap):
 			new_name = Path(os.path.normpath(self.file.parent / new_name))
 
 		try:
-			if new_name.exists():
+			if os.path.lexists(new_name):
 				if new_name.is_dir():
 					if new_name.resolve() == self.file.parent.resolve():
 						return
@@ -227,8 +228,12 @@ class CmdBar(urwid.WidgetWrap):
 
 		try:
 			current_file = shlex.quote(str(self.screen.center.focus.get_focus()['file'].relative_to(cwd)))
+			current_name = shlex.quote(tar_stem(self.screen.center.focus.get_focus()['file']))
+			current_extension = shlex.quote(tar_suffix(self.screen.center.focus.get_focus()['file']))
 		except (TypeError, AttributeError):
 			current_file = shlex.quote('')
+			current_name = shlex.quote('')
+			current_extension = shlex.quote('')
 
 		current_tagged = ' '.join([shlex.quote(str(x.relative_to(cwd))) for x in self.screen.center.focus.get_tagged_files()])
 		if not current_tagged:
@@ -243,8 +248,12 @@ class CmdBar(urwid.WidgetWrap):
 
 		try:
 			other_file = shlex.quote(str(other.get_focus()['file']))
+			other_name = shlex.quote(tar_stem(other.get_focus()['file']))
+			other_extension = shlex.quote(tar_suffix(other.get_focus()['file']))
 		except (TypeError, AttributeError):
 			other_file = shlex.quote('')
+			other_name = shlex.quote('')
+			other_extension = shlex.quote('')
 
 		other_tagged = ' '.join([shlex.quote(str(x)) for x in other.get_tagged_files()])
 		if not current_tagged:
@@ -253,11 +262,17 @@ class CmdBar(urwid.WidgetWrap):
 		s = Template(self.edit.get_edit_text())
 		d = {
 			'f': current_file,
+			'n': current_name,
+			'e': current_extension,
 			'd': shlex.quote(cwd),
+			'b': shlex.quote(Path(cwd).name),
 			's': current_tagged,
 			't': current_tagged,
 			'F': other_file,
+			'N': other_name,
+			'E': other_extension,
 			'D': shlex.quote(other_cwd),
+			'B': shlex.quote(Path(other_cwd).name),
 			'S': other_tagged,
 			'T': other_tagged,
 		}

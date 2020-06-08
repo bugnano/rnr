@@ -31,10 +31,10 @@ from .debug_print import (debug_print, debug_pprint)
 
 
 class DlgReport(urwid.WidgetWrap):
-	def __init__(self, controller, file_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
+	def __init__(self, controller, completed_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
 		self.controller = controller
 		self.command_bar = controller.screen.command_bar
-		self.file_list = file_list
+		self.completed_list = completed_list
 		self.error_list = error_list
 		self.skipped_list = skipped_list
 		self.aborted_list = aborted_list
@@ -61,10 +61,10 @@ class DlgReport(urwid.WidgetWrap):
 		self.messages.extend([f'ERROR [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in error_list])
 		self.messages.extend([f'SKIPPED [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in skipped_list])
 		if aborted_list:
-			self.messages.extend([f'{("WARNING" if x["message"] else "DONE")} [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in file_list])
+			self.messages.extend([f'{("WARNING" if x["message"] else "DONE")} [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in completed_list])
 			self.messages.extend([f'ABORTED [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in aborted_list])
 		else:
-			self.messages.extend([f'WARNING [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in file_list if x['message']])
+			self.messages.extend([f'WARNING [{x["message"]}]: {str(Path(x["file"]).relative_to(cwd))}' for x in completed_list if x['message']])
 
 		l = [urwid.Text(x, layout=TildeLayout) for x in self.messages]
 		w = urwid.SimpleListWalker(l)

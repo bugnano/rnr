@@ -1,9 +1,10 @@
 = RNR(1)
 :doctype: manpage
+:author: Franco Bugnano
 :man source: rnr
-:man version: 0.2.0
+:man version: 0.3.0
 :man manual: rnr manual
-:revdate: 2020-04-24
+:revdate: 2020-06-08
 
 
 == NAME
@@ -107,11 +108,18 @@ https://ranger.github.io/[Ranger]
 The following substitutions are available for the *!* command:
 
 _%f_:: The current file
-_%d_:: The current directory
+_%n_:: The current file name without extension
+_%e_:: The current file extension (including the leading .)
+_%d_:: The full path of the current directory
+_%b_:: The name of the current directory (basename)
 _%s, %t_:: The tagged files
 _%F_:: The file in the other panel
-_%D_:: The directory of the other panel
+_%N_:: The name of the file in the other panel without extension
+_%E_:: The extension of the file in the other panel (including the leading .)
+_%D_:: The full path of the directory of the other panel
+_%B_:: The name of the directory of the other panel (basename)
 _%S, %T_:: The tagged files of the other panel
+_%%_:: The % character
 
 There is no need to enclose these substitutions in quotes
 

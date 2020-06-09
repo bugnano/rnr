@@ -37,7 +37,7 @@ Its main goal is to be the most robust file copier in existence.
 
 ```bash
 # To install
-pip3 install --user rnr
+pip3 install --user --upgrade rnr
 
 # To run
 rnr

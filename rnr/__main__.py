@@ -33,31 +33,9 @@ import urwid
 
 import xdg.BaseDirectory
 
-DATA_DIR = Path(xdg.BaseDirectory.save_data_path('rnr'))
-CONFIG_DIR = Path(xdg.BaseDirectory.save_config_path('rnr'))
-
-sys.path.insert(0, str(CONFIG_DIR))
-_dont_write_bytecode = sys.dont_write_bytecode
-sys.dont_write_bytecode = True
-
-from .config import *
-
-try:
-	from config import *
-except ModuleNotFoundError:
-	try:
-		shutil.copy(Path(__file__).parent / 'config.py', CONFIG_DIR)
-		print(sys.path)
-		from config import *
-	except (ModuleNotFoundError, FileNotFoundError, PermissionError, IsADirectoryError):
-		pass
-
-sys.dont_write_bytecode = _dont_write_bytecode
-del _dont_write_bytecode
-sys.path.pop(0)
-
 from . import __version__
 
+from .import_config import *
 from .panel import Panel
 from .cmdbar import CmdBar
 from .buttonbar import ButtonBar
@@ -75,6 +53,9 @@ from .rnr_cpmv import rnr_cpmv
 from .database import DataBase
 from .dlg_pending_job import DlgPendingJob
 from .debug_print import (debug_print, debug_pprint, set_debug_fh)
+
+
+DATA_DIR = Path(xdg.BaseDirectory.save_data_path('rnr'))
 
 
 PALETTE = [
@@ -107,6 +88,16 @@ PALETTE = [
 	('dialog_focus', DIALOG_FOCUS_FG, DIALOG_FOCUS_BG, 'standout'),
 	('progress', DIALOG_BG, DIALOG_FG),
 	('input', INPUT_FG, INPUT_BG),
+
+	('Text', TEXT_FG, TEXT_BG),
+	('Namespace', NAMESPACE_FG, TEXT_BG),
+	('Keyword', KEYWORD_FG, TEXT_BG),
+	('Class', CLASS_FG, TEXT_BG),
+	('Operator', OPERATOR_FG, TEXT_BG),
+	('String', STRING_FG, TEXT_BG),
+	('Literal', LITERAL_FG, TEXT_BG),
+	('Comment', COMMENT_FG, TEXT_BG),
+	('Lineno', LINENO_FG, TEXT_BG, 'default,bold'),
 ]
 
 

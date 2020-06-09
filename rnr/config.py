@@ -4,6 +4,8 @@ OPENER = 'xdg-open'
 PAGER = os.environ.get('PAGER', 'less')
 EDITOR = os.environ.get('VISUAL', os.environ.get('EDITOR', 'vi'))
 
+USE_INTERNAL_VIEWER = True
+
 # Theme
 SHOW_BUTTONBAR = True
 
@@ -43,4 +45,19 @@ DIALOG_FOCUS_BG = 'dark cyan'
 
 INPUT_FG = 'black'
 INPUT_BG = 'dark cyan'
+
+# Config for rnrview
+TAB_SIZE = 4
+
+# Theme for rnrview
+TEXT_FG = 'light gray'
+TEXT_BG = 'dark blue'
+NAMESPACE_FG = 'light green'
+KEYWORD_FG = 'yellow'
+CLASS_FG = 'light red'
+OPERATOR_FG = 'white'
+STRING_FG = 'light cyan'
+LITERAL_FG = 'light magenta'
+COMMENT_FG = 'dark cyan'
+LINENO_FG = 'white'
 

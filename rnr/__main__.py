@@ -130,7 +130,7 @@ class Screen(urwid.WidgetWrap):
 
 
 class App(object):
-	def __init__(self, printwd, dbfile, monochrome):
+	def __init__(self, printwd, dbfile, monochrome, tabsize):
 		self.printwd = printwd
 
 		if not dbfile:
@@ -141,6 +141,7 @@ class App(object):
 			self.dbfile = str(Path(dbfile).resolve())
 
 		self.monochrome = monochrome
+		self.tabsize = tabsize
 
 		if self.dbfile:
 			db = DataBase(self.dbfile)
@@ -679,6 +680,7 @@ def main():
 	parser.add_argument('-D', '--database', help='Specify database file to use (default: %(default)s)', metavar='<file>', default=str(DATA_DIR / 'rnr.db'), dest='dbfile')
 	parser.add_argument('-n', '--nodb', help='Do not use database', action='store_false', dest='use_db')
 	parser.add_argument('-b', '--nocolor', help='Requests to run in black and white', action='store_true', dest='monochrome')
+	parser.add_argument('-t', '--tabsize', help='set tab size for viewer (default: %(default)d)', type=int, default=TAB_SIZE)
 	parser.add_argument('-d', '--debug', help='activate debug mode', action='store_true')
 	args = parser.parse_args()
 
@@ -690,7 +692,7 @@ def main():
 	else:
 		dbfile = None
 
-	app = App(args.printwd, dbfile, args.monochrome)
+	app = App(args.printwd, dbfile, args.monochrome, args.tabsize)
 	app.run()
 
 

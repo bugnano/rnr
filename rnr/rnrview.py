@@ -44,6 +44,93 @@ StyleFromToken = {
 }
 
 
+def masked_string(b):
+	chars = []
+	for x in b:
+		if (x < 0x20) or (x >= 0x7F):
+			chars.append(NON_PRINTABLE_MASK)
+		else:
+			chars.append(chr(x))
+
+	return ''.join(chars)
+
+
+class BinaryFileWalker(urwid.ListWalker):
+	def __init__(self, filename, file_size):
+		self.file_size = file_size
+		self.fh = open(filename, 'rb')
+		self.focus = 0
+
+		len_address = len(hex(file_size - 1).split('x')[1])
+		len_address += len_address % 2
+		self.len_address = max(len_address, 8)
+		self.fmt_address = f'%0{self.len_address}X'
+
+		self.line_width = 64
+
+	def get_focus(self):
+		position = self.focus
+		pos = position - (position % self.line_width)
+		if (pos < 0) or (pos >= self.file_size):
+			return (None, None)
+
+		self.fh.seek(pos)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+		return (w, pos)
+
+	def set_focus(self, position):
+		self.focus = position
+		self._modified()
+
+	def get_next(self, position):
+		pos = (position - (position % self.line_width)) + self.line_width
+		if pos >= self.file_size:
+			return (None, None)
+
+		self.fh.seek(pos)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+		return (w, pos)
+
+	def get_prev(self, position):
+		pos = (position - (position % self.line_width)) - self.line_width
+		if pos < 0:
+			return (None, None)
+
+		self.fh.seek(pos)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+		return (w, pos)
+
+	def positions(self, reverse=False):
+		if reverse:
+			return range(self.file_size - 1, -1, -1)
+		else:
+			return range(self.file_size)
+
+	def change_size(self, size):
+		width = size[0]
+		old_width = self.line_width
+		line_width = (width - (self.len_address + 1))
+		self.line_width = line_width - (line_width % 16)
+		if self.line_width != old_width:
+			self._modified()
+
+
+class ResizableListBox(urwid.ListBox):
+	def __init__(self, *args, **kwargs):
+		self.old_size = None
+		super().__init__(*args, **kwargs)
+
+	def render(self, size, *args, **kwargs):
+		if size != self.old_size:
+			self.old_size = size
+			try:
+				self.body.change_size(size)
+			except AttributeError:
+				pass
+
+		return super().render(size, *args, **kwargs)
+
+
 class Screen(urwid.WidgetWrap):
 	def __init__(self, controller, filename, file_size, tabsize):
 		self.controller = controller
@@ -73,7 +160,7 @@ class Screen(urwid.WidgetWrap):
 		else:
 			walker = self.read_binary_file()
 
-		w = urwid.ListBox(walker)
+		w = ResizableListBox(walker)
 		w = urwid.AttrMap(w, 'Text')
 
 		super().__init__(w)
@@ -115,20 +202,7 @@ class Screen(urwid.WidgetWrap):
 		return w
 
 	def read_binary_file(self):
-		with open(self.filename, 'rb') as fh:
-			data = fh.read(MAX_TEXT_FILE_SIZE)
-
-		chars = []
-		for x in data:
-			if (x < 0x20) or (x >= 0x7F):
-				chars.append(NON_PRINTABLE_MASK)
-			else:
-				chars.append(chr(x))
-
-		str_data = ''.join(chars)
-
-		lst = [urwid.Text(str_data, wrap='any')]
-		w = urwid.SimpleListWalker(lst)
+		w = BinaryFileWalker(self.filename, self.file_size)
 
 		return w
 

@@ -55,6 +55,19 @@ def masked_string(b):
 	return ''.join(chars)
 
 
+def hex_string(b):
+	chars = []
+	for i, e in enumerate(b):
+		if (i % 4) == 0:
+			fmt = ' %02X '
+		else:
+			fmt = '%02X '
+
+		chars.append(fmt % e)
+
+	return ''.join(chars)
+
+
 class BinaryFileWalker(urwid.ListWalker):
 	def __init__(self, filename, file_size):
 		self.file_size = file_size
@@ -76,6 +89,7 @@ class BinaryFileWalker(urwid.ListWalker):
 
 		self.fh.seek(pos)
 		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+
 		return (w, pos)
 
 	def set_focus(self, position):
@@ -89,6 +103,7 @@ class BinaryFileWalker(urwid.ListWalker):
 
 		self.fh.seek(pos)
 		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+
 		return (w, pos)
 
 	def get_prev(self, position):
@@ -98,6 +113,7 @@ class BinaryFileWalker(urwid.ListWalker):
 
 		self.fh.seek(pos)
 		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+
 		return (w, pos)
 
 	def positions(self, reverse=False):
@@ -111,6 +127,80 @@ class BinaryFileWalker(urwid.ListWalker):
 		old_width = self.line_width
 		line_width = (width - (self.len_address + 1))
 		self.line_width = line_width - (line_width % 16)
+		if self.line_width != old_width:
+			self._modified()
+
+
+class HexFileWalker(urwid.ListWalker):
+	def __init__(self, filename, file_size):
+		self.file_size = file_size
+		self.fh = open(filename, 'rb')
+		self.focus = 0
+
+		len_address = len(hex(file_size - 1).split('x')[1])
+		len_address += len_address % 2
+		self.len_address = max(len_address, 8)
+		self.fmt_address = f'%0{self.len_address}X'
+
+		self.line_width = 16
+		self.hex_width = int(self.line_width / 4) * 13
+
+	def get_focus(self):
+		position = self.focus
+		pos = position - (position % self.line_width)
+		if (pos < 0) or (pos >= self.file_size):
+			return (None, None)
+
+		self.fh.seek(pos)
+		data = self.fh.read(self.line_width)
+		h = hex_string(data)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+	def set_focus(self, position):
+		self.focus = position
+		self._modified()
+
+	def get_next(self, position):
+		pos = (position - (position % self.line_width)) + self.line_width
+		if pos >= self.file_size:
+			return (None, None)
+
+		self.fh.seek(pos)
+		data = self.fh.read(self.line_width)
+		h = hex_string(data)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+	def get_prev(self, position):
+		pos = (position - (position % self.line_width)) - self.line_width
+		if pos < 0:
+			return (None, None)
+
+		self.fh.seek(pos)
+		data = self.fh.read(self.line_width)
+		h = hex_string(data)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+	def positions(self, reverse=False):
+		if reverse:
+			return range(self.file_size - 1, -1, -1)
+		else:
+			return range(self.file_size)
+
+	def change_size(self, size):
+		width = size[0]
+		old_width = self.line_width
+
+		width -= self.len_address + 4
+		num_dwords = max(int(width / 17), 1)
+		self.line_width = num_dwords * 4
+		self.hex_width = int(self.line_width / 4) * 13
+
 		if self.line_width != old_width:
 			self._modified()
 
@@ -202,7 +292,8 @@ class Screen(urwid.WidgetWrap):
 		return w
 
 	def read_binary_file(self):
-		w = BinaryFileWalker(self.filename, self.file_size)
+		#w = BinaryFileWalker(self.filename, self.file_size)
+		w = HexFileWalker(self.filename, self.file_size)
 
 		return w
 

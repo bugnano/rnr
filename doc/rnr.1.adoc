@@ -50,8 +50,8 @@ https://ranger.github.io/[Ranger]
 *TAB*:: Change active panel
 *ALT-I*:: Set the other panel to the current directory
 *ALT-O*:: Set the other panel to the highlited directory
-*F3*:: View file with the selected pager / Enter directory
-*F4*:: Edit file/directory with the selected editor
+*v, F3*:: View file with the selected pager / Enter directory
+*e, F4*:: Edit file/directory with the selected editor
 *F7*:: Make directory
 
 === PANEL
@@ -91,7 +91,7 @@ https://ranger.github.io/[Ranger]
 
 === SELECT (TAG) FILES
 *INSERT, SPACE*:: Toggle tag on selected file
-**, v*:: Toggle tag on all files
+***:: Toggle tag on all files
 *+*:: Tag files that match the shell wildcard pattern
 *-, \*:: Untag files that match the shell wildcard pattern
 *uv*:: Untag all files

@@ -198,12 +198,12 @@ class VimListBox(urwid.ListBox):
 				self.model.show_details(None)
 
 			return retval
-		elif key == 'f3':
+		elif key in ('v', 'f3'):
 			try:
 				self.model.view(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				pass
-		elif key == 'f4':
+		elif key in ('e', 'f4'):
 			try:
 				self.model.edit(self.model.walker.get_focus()[0].model)
 			except AttributeError:
@@ -212,7 +212,7 @@ class VimListBox(urwid.ListBox):
 			if self.model.tag_toggle():
 				if (self.focus_position + 1) < len(self.model.walker):
 					super().keypress(size, 'down')
-		elif key in ('*', 'v'):
+		elif key == '*':
 			self.model.tag_toggle_all()
 		else:
 			return super().keypress(size, key)

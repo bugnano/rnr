@@ -167,7 +167,7 @@ class App(object):
 		self.editor = EDITOR
 		self.use_internal_viewer = USE_INTERNAL_VIEWER
 
-		self.view_widget = None
+		self.old_screen = None
 		self.loop = None
 		self.screen = Screen(self)
 		self.leader = ''
@@ -701,12 +701,14 @@ class App(object):
 		except OSError:
 			return
 
-		self.view_widget = rnrview.Screen(self, filename, file_size, self.tabsize)
-		self.loop.widget = self.view_widget
+		self.old_screen = self.screen
+		self.screen = rnrview.Screen(self, filename, file_size, self.tabsize)
+		self.loop.widget = self.screen
 		self.loop._unhandled_input = functools.partial(rnrview.keypress, self)
 
 	def close_viewer(self):
-		self.view_widget = None
+		self.screen = self.old_screen
+		self.old_screen = None
 		self.loop.widget = self.screen
 		self.loop._unhandled_input = self.keypress
 

@@ -79,9 +79,9 @@ class TopBar(urwid.WidgetWrap):
 
 
 class BinaryFileWalker(urwid.ListWalker):
-	def __init__(self, filename, file_size):
+	def __init__(self, fh, file_size):
+		self.fh = fh
 		self.file_size = file_size
-		self.fh = open(filename, 'rb')
 		self.focus = 0
 
 		len_address = len(hex(file_size - 1).split('x')[1])
@@ -145,9 +145,9 @@ class BinaryFileWalker(urwid.ListWalker):
 
 
 class HexFileWalker(urwid.ListWalker):
-	def __init__(self, filename, file_size):
+	def __init__(self, fh, file_size):
+		self.fh = fh
 		self.file_size = file_size
-		self.fh = open(filename, 'rb')
 		self.focus = 0
 
 		len_address = len(hex(file_size - 1).split('x')[1])
@@ -218,37 +218,20 @@ class HexFileWalker(urwid.ListWalker):
 			self._modified()
 
 
-class ResizableListBox(urwid.ListBox):
-	def __init__(self, *args, **kwargs):
-		self.old_size = None
-		super().__init__(*args, **kwargs)
-
-	def render(self, size, *args, **kwargs):
-		if size != self.old_size:
-			self.old_size = size
-			try:
-				self.body.change_size(size)
-			except AttributeError:
-				pass
-
-		return super().render(size, *args, **kwargs)
-
-
-class Screen(urwid.WidgetWrap):
+class FileViewListBox(urwid.ListBox):
 	def __init__(self, controller, filename, file_size, tabsize):
 		self.controller = controller
 		self.filename = filename
 		self.file_size = file_size
 		self.tabsize = tabsize
 
-		top = TopBar(filename)
+		fh = open(filename, 'rb')
 
 		text_file = True
 		if file_size > MAX_TEXT_FILE_SIZE:
 			text_file = False
 		else:
-			with open(filename, 'rb') as fh:
-				data = fh.read(131072)
+			data = fh.read(131072)
 
 			if b'\0' in data:
 				text_file = False
@@ -261,39 +244,19 @@ class Screen(urwid.WidgetWrap):
 
 		self.text_file = text_file
 		if text_file:
-			walker = self.read_text_file()
+			self.walker = self.read_text_file()
 		else:
-			walker = self.read_binary_file()
+			self.walker = BinaryFileWalker(fh, self.file_size)
 
-		w = ResizableListBox(walker)
-		w = urwid.AttrMap(w, 'Text')
+		self.hex_walker = HexFileWalker(fh, self.file_size)
 
-		pile_widgets = [(1, urwid.Filler(top)), w]
+		self.old_size = None
 
-		if SHOW_BUTTONBAR:
-			labels = [
-				' ', #'Help',
-				' ', #'UnWrap',
-				'Quit',
-				'Hex', #'Ascii',
-				'Goto',
-				' ',
-				'Search',
-				' ', #'Raw',
-				' ', #'Format',
-				'Quit',
-			]
-			bottom = ButtonBar(labels)
-			w = urwid.Filler(bottom)
-			pile_widgets.append((1, w))
-
-		self.pile = urwid.Pile(pile_widgets)
-
-		super().__init__(self.pile)
+		super().__init__(self.walker)
 
 	def read_text_file(self):
 		with open(self.filename) as fh:
-			code = fh.read()
+			code = fh.read(MAX_TEXT_FILE_SIZE)
 
 		lines = []
 
@@ -327,11 +290,97 @@ class Screen(urwid.WidgetWrap):
 
 		return w
 
-	def read_binary_file(self):
-		#w = BinaryFileWalker(self.filename, self.file_size)
-		w = HexFileWalker(self.filename, self.file_size)
+	def render(self, size, *args, **kwargs):
+		if size != self.old_size:
+			self.old_size = size
+			try:
+				self.body.change_size(size)
+			except AttributeError:
+				pass
 
-		return w
+		return super().render(size, *args, **kwargs)
+
+	def keypress(self, size, key):
+		if key == 'f4':
+			if self.body == self.walker:
+				self.body = self.hex_walker
+			else:
+				self.body = self.walker
+
+			try:
+				self.body.change_size(size)
+			except AttributeError:
+				pass
+
+			self._invalidate()
+		elif key in ('j', 'down'):
+			retval = super().keypress(size, 'down')
+			self._invalidate()
+
+			return retval
+		elif key in ('k', 'up'):
+			retval = super().keypress(size, 'up')
+			self._invalidate()
+
+			return retval
+		elif key in ('g', 'home'):
+			retval = super().keypress(size, 'home')
+			self._invalidate()
+
+			return retval
+		elif key in ('G', 'end'):
+			retval = super().keypress(size, 'end')
+			self._invalidate()
+
+			return retval
+		elif key in ('ctrl b', 'page up'):
+			retval = super().keypress(size, 'page up')
+			self._invalidate()
+
+			return retval
+		elif key in ('ctrl f', 'page down'):
+			retval = super().keypress(size, 'page down')
+			self._invalidate()
+
+			return retval
+		else:
+			return super().keypress(size, key)
+
+
+class Screen(urwid.WidgetWrap):
+	def __init__(self, controller, filename, file_size, tabsize):
+		self.controller = controller
+		self.filename = filename
+		self.file_size = file_size
+		self.tabsize = tabsize
+
+		top = TopBar(filename)
+
+		w = FileViewListBox(controller, filename, file_size, tabsize)
+		w = urwid.AttrMap(w, 'Text')
+
+		pile_widgets = [(1, urwid.Filler(top)), w]
+
+		if SHOW_BUTTONBAR:
+			labels = [
+				' ', #'Help',
+				' ', #'UnWrap',
+				'Quit',
+				'Hex', #'Ascii',
+				'Goto',
+				' ',
+				'Search',
+				' ', #'Raw',
+				' ', #'Format',
+				'Quit',
+			]
+			bottom = ButtonBar(labels)
+			w = urwid.Filler(bottom)
+			pile_widgets.append((1, w))
+
+		self.pile = urwid.Pile(pile_widgets)
+
+		super().__init__(self.pile)
 
 
 class App(object):
@@ -352,7 +401,7 @@ class App(object):
 
 
 def keypress(controller, key):
-	if key in ('q', 'Q', 'f3', 'f10'):
+	if key in ('q', 'Q', 'v', 'f3', 'f10'):
 		try:
 			controller.close_viewer()
 		except AttributeError:

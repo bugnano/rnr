@@ -282,7 +282,6 @@ class CmdBar(urwid.WidgetWrap):
 		cmd = s.safe_substitute(d)
 		print(f'[{cwd}]{prompt} {cmd}')
 		subprocess.run(cmd, shell=True, cwd=cwd)
-		input('Press ENTER to continue...')
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
 		self.controller.reload()

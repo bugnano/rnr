@@ -5,6 +5,7 @@ import sys
 import os
 
 import argparse
+import functools
 
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from . import __version__
 
 from .import_config import *
 from .__main__ import PALETTE
+from .buttonbar import ButtonBar
+from .utils import TildeLayout
 from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 
 
@@ -66,6 +69,13 @@ def hex_string(b):
 		chars.append(fmt % e)
 
 	return ''.join(chars)
+
+
+class TopBar(urwid.WidgetWrap):
+	def __init__(self, filename):
+		w = urwid.Text(os.path.abspath(filename), layout=TildeLayout)
+		w = urwid.AttrMap(w, 'selected')
+		super().__init__(w)
 
 
 class BinaryFileWalker(urwid.ListWalker):
@@ -125,8 +135,11 @@ class BinaryFileWalker(urwid.ListWalker):
 	def change_size(self, size):
 		width = size[0]
 		old_width = self.line_width
-		line_width = (width - (self.len_address + 1))
+
+		width -= self.len_address + 1
+		line_width = max(width, 16)
 		self.line_width = line_width - (line_width % 16)
+
 		if self.line_width != old_width:
 			self._modified()
 
@@ -228,6 +241,8 @@ class Screen(urwid.WidgetWrap):
 		self.file_size = file_size
 		self.tabsize = tabsize
 
+		top = TopBar(filename)
+
 		text_file = True
 		if file_size > MAX_TEXT_FILE_SIZE:
 			text_file = False
@@ -253,7 +268,28 @@ class Screen(urwid.WidgetWrap):
 		w = ResizableListBox(walker)
 		w = urwid.AttrMap(w, 'Text')
 
-		super().__init__(w)
+		pile_widgets = [(1, urwid.Filler(top)), w]
+
+		if SHOW_BUTTONBAR:
+			labels = [
+				' ', #'Help',
+				' ', #'UnWrap',
+				'Quit',
+				'Hex', #'Ascii',
+				'Goto',
+				' ',
+				'Search',
+				' ', #'Raw',
+				' ', #'Format',
+				'Quit',
+			]
+			bottom = ButtonBar(labels)
+			w = urwid.Filler(bottom)
+			pile_widgets.append((1, w))
+
+		self.pile = urwid.Pile(pile_widgets)
+
+		super().__init__(self.pile)
 
 	def read_text_file(self):
 		with open(self.filename) as fh:
@@ -307,15 +343,19 @@ class App(object):
 		self.screen = Screen(self, filename, file_size, tabsize)
 
 	def run(self):
-		self.loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=self.keypress)
+		self.loop = urwid.MainLoop(self.screen, PALETTE, unhandled_input=functools.partial(keypress, self))
 
 		if self.monochrome:
 			self.loop.screen.set_terminal_properties(colors=1)
 
 		self.loop.run()
 
-	def keypress(self, key):
-		if key in ('q', 'Q', 'f3', 'f10'):
+
+def keypress(controller, key):
+	if key in ('q', 'Q', 'f3', 'f10'):
+		try:
+			controller.close_viewer()
+		except AttributeError:
 			raise urwid.ExitMainLoop()
 
 

@@ -101,6 +101,9 @@ PALETTE = [
 ]
 
 
+from . import rnrview
+
+
 class Screen(urwid.WidgetWrap):
 	def __init__(self, controller):
 		self.left = Panel(controller)
@@ -111,7 +114,19 @@ class Screen(urwid.WidgetWrap):
 		pile_widgets = [self.center, (1, w)]
 
 		if SHOW_BUTTONBAR:
-			bottom = ButtonBar()
+			labels = [
+				' ', #'Help',
+				' ', #'Menu',
+				'View',
+				'Edit',
+				'Copy',
+				'Move',
+				'Mkdir',
+				'Delete',
+				' ', #'PullDn',
+				'Quit',
+			]
+			bottom = ButtonBar(labels)
 			w = urwid.Filler(bottom)
 			pile_widgets.append((1, w))
 
@@ -150,7 +165,9 @@ class App(object):
 		self.opener = OPENER
 		self.pager = PAGER
 		self.editor = EDITOR
+		self.use_internal_viewer = USE_INTERNAL_VIEWER
 
+		self.view_widget = None
 		self.loop = None
 		self.screen = Screen(self)
 		self.leader = ''
@@ -328,6 +345,12 @@ class App(object):
 				(self.screen.center.contents[0], self.screen.center.contents[1]) = (self.screen.center.contents[1], self.screen.center.contents[0])
 				self.screen.center.focus_position ^= 1
 				self.screen.update_focus()
+			elif key == 'ctrl o':
+				self.loop.stop()
+				input('Press ENTER to continue...')
+				self.loop.start()
+				os.kill(os.getpid(), signal.SIGWINCH)
+				self.reload()
 			elif key == 'f7':
 				self.screen.command_bar.mkdir(self.screen.center.focus.cwd)
 			elif key == 'c':
@@ -671,6 +694,21 @@ class App(object):
 			'center', ('relative', 75),
 			'middle', ('relative', 75),
 		), self.screen.pile.options())
+
+	def view(self, filename):
+		try:
+			file_size = os.stat(filename).st_size
+		except OSError:
+			return
+
+		self.view_widget = rnrview.Screen(self, filename, file_size, self.tabsize)
+		self.loop.widget = self.view_widget
+		self.loop._unhandled_input = functools.partial(rnrview.keypress, self)
+
+	def close_viewer(self):
+		self.view_widget = None
+		self.loop.widget = self.screen
+		self.loop._unhandled_input = self.keypress
 
 
 def main():

@@ -513,6 +513,8 @@ class Panel(urwid.WidgetWrap):
 	def view(self, file):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
+		elif self.controller.use_internal_viewer:
+			self.controller.view(file['file'])
 		else:
 			self.controller.loop.stop()
 			subprocess.run([self.controller.pager, file['file'].name], cwd=self.cwd)

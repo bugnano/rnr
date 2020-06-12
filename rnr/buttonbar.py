@@ -22,24 +22,10 @@ import os
 import urwid
 
 
-texts = [
-	' ', #'Help',
-	' ', #'Menu',
-	'View',
-	'Edit',
-	'Copy',
-	'Move',
-	'Mkdir',
-	'Delete',
-	' ', #'PullDn',
-	'Quit',
-]
-
-
 class ButtonBar(urwid.WidgetWrap):
-	def __init__(self):
+	def __init__(self, labels):
 		widgets = []
-		for i, label in enumerate(texts):
+		for i, label in enumerate(labels):
 			w = urwid.Text(f'{i + 1}', align='right')
 			w = urwid.AttrMap(w, 'hotkey')
 			widgets.append((2, w))

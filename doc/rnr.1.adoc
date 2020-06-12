@@ -46,6 +46,7 @@ https://ranger.github.io/[Ranger]
 *q, Q, F10*:: Exit
 *CTRL-R*:: Reload panels
 *CTRL-U*:: Swap panels
+*CTRL-O*:: Show console output
 *TAB*:: Change active panel
 *ALT-I*:: Set the other panel to the current directory
 *ALT-O*:: Set the other panel to the highlited directory
@@ -137,6 +138,10 @@ _$XDG_CONFIG_HOME/rnr/config.py_::
 	The rnr(1) configuration file
 _$XDG_CONFIG_HOME/rnr/bookmarks_::
 	The currently saved bookmarks
+_/usr/bin/rnr::
+	The main executable
+_/usr/bin/rnrview::
+	The internal viewer
 _/usr/share/rnr/rnr.fish_::
 	Copy this file to _~/.config/fish/functions/_ to cd to the last directory
 	when using the fish shell

@@ -113,7 +113,7 @@ class DlgReport(urwid.WidgetWrap):
 			db.delete_job(self.job_id)
 			del db
 
-		self.controller.close_dialog()
+		self.controller.screen.close_dialog()
 		self.command_bar.reset()
 
 		if self.controller.pending_jobs:

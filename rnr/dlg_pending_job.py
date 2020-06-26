@@ -99,7 +99,7 @@ class DlgPendingJob(urwid.WidgetWrap):
 			self.listbox.keypress(size, 'end')
 
 	def on_continue(self):
-		self.controller.close_dialog()
+		self.controller.screen.close_dialog()
 
 		job_id = self.pending_job['id']
 
@@ -147,7 +147,7 @@ class DlgPendingJob(urwid.WidgetWrap):
 					self.controller.reload()
 
 	def on_skip(self):
-		self.controller.close_dialog()
+		self.controller.screen.close_dialog()
 
 		if self.controller.pending_jobs:
 			self.controller.show_next_pending_job()
@@ -160,7 +160,7 @@ class DlgPendingJob(urwid.WidgetWrap):
 			db.delete_job(self.pending_job['id'])
 			del db
 
-		self.controller.close_dialog()
+		self.controller.screen.close_dialog()
 
 		if self.controller.pending_jobs:
 			self.controller.show_next_pending_job()

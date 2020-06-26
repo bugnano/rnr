@@ -21,10 +21,12 @@ import os
 
 import urwid
 
+from .debug_print import (debug_print, debug_pprint)
+
 
 class DlgError(urwid.WidgetWrap):
-	def __init__(self, controller, e):
-		self.controller = controller
+	def __init__(self, screen, e):
+		self.screen = screen
 
 		w = urwid.Filler(urwid.Text(f' {e} ', align='center'), top=1, bottom=1)
 		w = urwid.LineBox(w, 'Error', title_attr='error_title')
@@ -39,5 +41,5 @@ class DlgError(urwid.WidgetWrap):
 		super().__init__(w)
 
 	def keypress(self, size, key):
-		self.controller.close_dialog()
+		self.screen.close_dialog()
 

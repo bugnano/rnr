@@ -22,6 +22,8 @@ from . import __version__
 from .import_config import *
 from .__main__ import PALETTE
 from .buttonbar import ButtonBar
+from .dlg_goto import DlgGoto
+from .dlg_error import DlgError
 from .utils import TildeLayout
 from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 
@@ -238,13 +240,21 @@ class FileViewListBox(urwid.ListBox):
 
 			if text_file:
 				try:
-					data.decode(sys.getdefaultencoding())
+					encoding = sys.getdefaultencoding()
+					data.decode(encoding)
 				except UnicodeDecodeError:
-					text_file = False
+					if encoding == 'windows-1252':
+						text_file = False
+					else:
+						try:
+							encoding = 'windows-1252'
+							data.decode(encoding)
+						except UnicodeDecodeError:
+							text_file = False
 
 		self.text_file = text_file
 		if text_file:
-			self.walker = self.read_text_file()
+			self.walker = self.read_text_file(fh, encoding)
 		else:
 			self.walker = BinaryFileWalker(fh, self.file_size)
 
@@ -254,20 +264,38 @@ class FileViewListBox(urwid.ListBox):
 
 		super().__init__(self.walker)
 
-	def read_text_file(self):
-		with open(self.filename) as fh:
-			code = fh.read(MAX_TEXT_FILE_SIZE)
-
-		lines = []
+	def read_text_file(self, fh, encoding):
+		fh.seek(0)
+		data = fh.read(MAX_TEXT_FILE_SIZE)
 
 		try:
-			lexer = pygments.lexers.get_lexer_for_filename(self.filename, stripnl=False, tabsize=self.tabsize)
+			code = data.decode(encoding)
+		except UnicodeDecodeError:
+			if encoding == 'windows-1252':
+				return BinaryFileWalker(fh, self.file_size)
+			else:
+				try:
+					encoding = 'windows-1252'
+					code = data.decode(encoding)
+				except UnicodeDecodeError:
+					self.text_file = False
+					return BinaryFileWalker(fh, self.file_size)
+
+		try:
+			name = self.filename.name
+			if name == name.upper():
+				filename = self.filename.parent / self.filename.name.lower()
+			else:
+				filename = self.filename
+
+			lexer = pygments.lexers.get_lexer_for_filename(filename, stripnl=False, tabsize=self.tabsize)
 		except pygments.util.ClassNotFound:
 			try:
 				lexer = pygments.lexers.guess_lexer(code, stripnl=False, tabsize=self.tabsize)
 			except pygments.util.ClassNotFound:
 				lexer = pygments.lexers.special.TextLexer(stripnl=False, tabsize=self.tabsize)
 
+		lines = []
 		line = []
 		result = pygments.lex(code, lexer)
 		for tokentype, value in result:
@@ -279,16 +307,25 @@ class FileViewListBox(urwid.ListBox):
 				style = 'Text'
 
 			for l in value.splitlines(keepends=True):
-				line.append((style, l.rstrip('\n')))
 				if '\n' in l:
+					line.append((style, l.rstrip('\n')))
 					lines.append(line)
 					line = []
+				else:
+					line.append((style, l))
 
+		self.lines = lines
 		digits = len(str(len(lines)))
 		lst = [urwid.Columns([(digits, urwid.Text(('Lineno', f'{i+1}'), align='right')), urwid.Text(x, wrap='clip')], dividechars=1) for i, x in enumerate(lines)]
 		w = urwid.SimpleListWalker(lst)
 
 		return w
+
+	def use_hex_offset(self):
+		if self.text_file:
+			return self.body == self.hex_walker
+		else:
+			return True
 
 	def render(self, size, *args, **kwargs):
 		if size != self.old_size:
@@ -301,7 +338,7 @@ class FileViewListBox(urwid.ListBox):
 		return super().render(size, *args, **kwargs)
 
 	def keypress(self, size, key):
-		if key == 'f4':
+		if key in ('h', 'f4'):
 			if self.body == self.walker:
 				self.body = self.hex_walker
 			else:
@@ -354,12 +391,14 @@ class Screen(urwid.WidgetWrap):
 		self.file_size = file_size
 		self.tabsize = tabsize
 
+		self.in_error = False
+
 		top = TopBar(filename)
 
-		w = FileViewListBox(controller, filename, file_size, tabsize)
-		w = urwid.AttrMap(w, 'Text')
+		self.list_box = FileViewListBox(controller, filename, file_size, tabsize)
+		self.center = urwid.AttrMap(self.list_box, 'Text')
 
-		pile_widgets = [(1, urwid.Filler(top)), w]
+		pile_widgets = [(1, urwid.Filler(top)), self.center]
 
 		if SHOW_BUTTONBAR:
 			labels = [
@@ -382,6 +421,44 @@ class Screen(urwid.WidgetWrap):
 
 		super().__init__(self.pile)
 
+	def on_goto(self, pos):
+		self.close_dialog()
+
+		try:
+			if self.list_box.use_hex_offset():
+				pos = int(pos, 16)
+			else:
+				pos = int(pos, 10) - 1
+		except ValueError:
+			self.error(f'Invalid number: {pos}')
+			return
+
+		if self.list_box.use_hex_offset():
+			if pos >= self.list_box.file_size:
+				pos = self.list_box.file_size - 1
+		else:
+			if pos >= len(self.list_box.lines):
+				pos = len(self.list_box.lines) - 1
+
+		if pos < 0:
+			pos = 0
+
+		self.list_box.set_focus(pos)
+		self.list_box.set_focus_valign('top')
+
+	def close_dialog(self):
+		self.pile.contents[1] = (self.center, self.pile.options())
+
+		self.in_error = False
+
+	def error(self, e):
+		self.pile.contents[1] = (urwid.Overlay(DlgError(self, e), self.center,
+			'center', len(e) + 6,
+			'middle', 'pack',
+		), self.pile.options())
+
+		self.in_error = True
+
 
 class App(object):
 	def __init__(self, filename, file_size, monochrome, tabsize):
@@ -401,11 +478,28 @@ class App(object):
 
 
 def keypress(controller, key):
+	if controller.screen.in_error:
+		controller.screen.close_dialog()
+		return
+
 	if key in ('q', 'Q', 'v', 'f3', 'f10'):
 		try:
 			controller.close_viewer()
 		except AttributeError:
 			raise urwid.ExitMainLoop()
+	elif key == 'f5':
+		if controller.screen.list_box.file_size == 0:
+			return
+
+		if controller.screen.list_box.use_hex_offset():
+			label = 'Hex offset: '
+		else:
+			label = 'Line number: '
+
+		controller.screen.pile.contents[1] = (urwid.Overlay(DlgGoto(controller.screen, controller.screen.on_goto, lambda x: controller.screen.close_dialog(), label=label), controller.screen.center,
+			'center', 30,
+			'middle', 'pack',
+		), controller.screen.pile.options())
 
 
 def main():
@@ -417,7 +511,7 @@ def main():
 	parser.add_argument('-d', '--debug', help='activate debug mode', action='store_true')
 	args = parser.parse_args()
 
-	filename = args.FILE
+	filename = Path(args.FILE)
 
 	try:
 		file_size = os.stat(filename).st_size

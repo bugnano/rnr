@@ -15,7 +15,11 @@ Its main goal is to be the most robust file copier in existence.
 * Many file rename options
 * Robust file copy engine with minimal user interaction. Great for copying
   large amounts of data reliably.
-* View files with the selected pager (default: less)
+* Text and binary file viewer with line numbers and syntax highlighting for
+  text, and masked data for binary, with optional hex display mode for both
+  formats
+* If the internal file viewer is not used, view files with the selected pager
+  (default: less)
 * Edit files with the selected editor (default: vi)
 * Open files with the selected opener (default: xdg-open)
 * Execute shell commands on the selected files
@@ -36,7 +40,7 @@ Its main goal is to be the most robust file copier in existence.
 ## Installation and running
 
 ```bash
-# To install
+# To install or upgrade
 pip3 install --user --upgrade rnr
 
 # To run

@@ -96,7 +96,7 @@ class DlgDeleteProgress(urwid.WidgetWrap):
 			pass
 		elif 'result' in info:
 			retval = False
-			self.controller.close_dialog()
+			self.controller.screen.close_dialog()
 			self.controller.suspend.discard(self.ev_suspend)
 			self.on_complete(info['result'], info['error'], info['skipped'], info['aborted'])
 		else:

@@ -79,7 +79,7 @@ class DlgDirscan(urwid.WidgetWrap):
 			pass
 		elif 'result' in info:
 			retval = False
-			self.controller.close_dialog()
+			self.controller.screen.close_dialog()
 			if not self.ev_abort.is_set():
 				self.on_complete(info['result'], info['error'], info['skipped'])
 		else:
@@ -91,7 +91,7 @@ class DlgDirscan(urwid.WidgetWrap):
 
 	def on_abort(self):
 		self.ev_abort.set()
-		self.controller.close_dialog()
+		self.controller.screen.close_dialog()
 
 		return False
 

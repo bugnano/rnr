@@ -143,6 +143,18 @@ class Screen(urwid.WidgetWrap):
 			else:
 				e[0].set_title_attr('panel')
 
+	def close_dialog(self):
+		self.pile.contents[0] = (self.center, self.pile.options())
+		self.center.focus.remove_force_focus()
+
+	def error(self, e):
+		self.center.focus.force_focus()
+		self.pile.contents[0] = (urwid.Overlay(DlgError(self, e), self.center,
+			'center', len(e) + 6,
+			'middle', 'pack',
+		), self.pile.options())
+
+
 
 class App(object):
 	def __init__(self, printwd, dbfile, monochrome, tabsize):
@@ -384,7 +396,7 @@ class App(object):
 				self.screen.command_bar.tag_glob()
 			elif key in ('-', '\\'):
 				self.screen.command_bar.untag_glob()
-			elif key == '!':
+			elif key in (':', '!'):
 				self.screen.command_bar.shell()
 			elif key == 'f8':
 				tagged_files = self.screen.center.focus.get_tagged_files()
@@ -396,7 +408,7 @@ class App(object):
 
 					self.screen.center.focus.force_focus()
 					self.screen.pile.contents[0] = (urwid.Overlay(DlgQuestion(self, title='Delete', question=question,
-						on_yes=lambda x: self.on_delete(tagged_files, str(self.screen.center.focus.cwd)), on_no=lambda x: self.close_dialog()), self.screen.center,
+						on_yes=lambda x: self.on_delete(tagged_files, str(self.screen.center.focus.cwd)), on_no=lambda x: self.screen.close_dialog()), self.screen.center,
 						'center', max(len(question) + 6, 21),
 						'middle', 'pack',
 					), self.screen.pile.options())
@@ -415,7 +427,7 @@ class App(object):
 
 					self.screen.center.focus.force_focus()
 					self.screen.pile.contents[0] = (urwid.Overlay(DlgCpMv(self, title='Copy', question=question, dest_dir=str(dest_dir),
-						on_ok=functools.partial(self.on_copy, tagged_files, str(self.screen.center.focus.cwd)), on_cancel=lambda x: self.close_dialog()), self.screen.center,
+						on_ok=functools.partial(self.on_copy, tagged_files, str(self.screen.center.focus.cwd)), on_cancel=lambda x: self.screen.close_dialog()), self.screen.center,
 						'center', ('relative', 85),
 						'middle', 'pack',
 					), self.screen.pile.options())
@@ -434,7 +446,7 @@ class App(object):
 
 					self.screen.center.focus.force_focus()
 					self.screen.pile.contents[0] = (urwid.Overlay(DlgCpMv(self, title='Move', question=question, dest_dir=str(dest_dir),
-						on_ok=functools.partial(self.on_move, tagged_files, str(self.screen.center.focus.cwd)), on_cancel=lambda x: self.close_dialog()), self.screen.center,
+						on_ok=functools.partial(self.on_move, tagged_files, str(self.screen.center.focus.cwd)), on_cancel=lambda x: self.screen.close_dialog()), self.screen.center,
 						'center', ('relative', 85),
 						'middle', 'pack',
 					), self.screen.pile.options())
@@ -469,17 +481,6 @@ class App(object):
 
 		self.screen.left.reload(left_path)
 		self.screen.right.reload(right_path)
-
-	def error(self, e):
-		self.screen.center.focus.force_focus()
-		self.screen.pile.contents[0] = (urwid.Overlay(DlgError(self, e), self.screen.center,
-			'center', len(e) + 6,
-			'middle', 'pack',
-		), self.screen.pile.options())
-
-	def close_dialog(self):
-		self.screen.pile.contents[0] = (self.screen.center, self.screen.pile.options())
-		self.screen.center.focus.remove_force_focus()
 
 	def do_dirscan(self, files, cwd, on_complete):
 		self.screen.center.focus.force_focus()
@@ -517,7 +518,7 @@ class App(object):
 			self.reload()
 
 	def on_delete(self, files, cwd):
-		self.close_dialog()
+		self.screen.close_dialog()
 		self.do_dirscan(files, cwd, functools.partial(self.do_delete, files=files, cwd=cwd, job_id=None))
 
 	def do_delete(self, file_list, scan_error, scan_skipped, files, cwd, job_id):
@@ -547,7 +548,7 @@ class App(object):
 		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, self.ev_interrupt, ev_abort, ev_nodb, self.dbfile, job_id)).start()
 
 	def on_copy(self, files, cwd, dest, on_conflict):
-		self.close_dialog()
+		self.screen.close_dialog()
 
 		path_cwd = Path(cwd)
 		path_dest = Path(dest)
@@ -569,20 +570,20 @@ class App(object):
 				else:
 					dest_parent = path_dest.parent
 					if not dest_parent.is_dir():
-						self.error(f'{str(Path(dest).parent)} is not a directory')
+						self.screen.error(f'{str(Path(dest).parent)} is not a directory')
 					elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 						pass
 					else:
 						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 			else:
 				if not path_dest.is_dir():
-					self.error(f'{dest} is not a directory')
+					self.screen.error(f'{dest} is not a directory')
 				elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 					pass
 				else:
 					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, files=files, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 		except (FileNotFoundError, PermissionError) as e:
-			self.error(f'{e.strerror} ({e.errno})')
+			self.screen.error(f'{e.strerror} ({e.errno})')
 
 	def do_copy(self, file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id):
 		self.screen.center.focus.force_focus()
@@ -611,7 +612,7 @@ class App(object):
 		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, self.ev_interrupt, ev_abort, ev_nodb, self.dbfile, job_id)).start()
 
 	def on_move(self, files, cwd, dest, on_conflict):
-		self.close_dialog()
+		self.screen.close_dialog()
 
 		path_cwd = Path(cwd)
 		path_dest = Path(dest)
@@ -633,20 +634,20 @@ class App(object):
 				else:
 					dest_parent = path_dest.parent
 					if not dest_parent.is_dir():
-						self.error(f'{str(Path(dest).parent)} is not a directory')
+						self.screen.error(f'{str(Path(dest).parent)} is not a directory')
 					elif path_cwd.resolve() == path_dest.resolve():
 						pass
 					else:
 						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 			else:
 				if not path_dest.is_dir():
-					self.error(f'{dest} is not a directory')
+					self.screen.error(f'{dest} is not a directory')
 				elif path_cwd.resolve() == path_dest.resolve():
 					pass
 				else:
 					self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 		except (FileNotFoundError, PermissionError) as e:
-			self.error(f'{e.strerror} ({e.errno})')
+			self.screen.error(f'{e.strerror} ({e.errno})')
 
 	def do_move(self, file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id):
 		self.screen.center.focus.force_focus()

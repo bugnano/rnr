@@ -157,7 +157,7 @@ class CmdBar(urwid.WidgetWrap):
 			os.makedirs(new_dir, exist_ok=True)
 			self.controller.reload(new_dir, only_focused=True)
 		except (PermissionError, FileExistsError) as e:
-			self.controller.error(f'{e.strerror} ({e.errno})')
+			self.screen.error(f'{e.strerror} ({e.errno})')
 
 	def rename(self, file, mode):
 		self.file = file
@@ -200,13 +200,13 @@ class CmdBar(urwid.WidgetWrap):
 					if (new_name.parent.resolve() / new_name.name) == (self.file.parent.resolve() / self.file.name):
 						return
 
-					self.controller.error(f'File already exists')
+					self.screen.error(f'File already exists')
 					return
 
 			self.file.rename(new_name)
 			self.controller.reload(new_name, old_focus=self.file)
 		except OSError as e:
-			self.controller.error(f'{e.strerror} ({e.errno})')
+			self.screen.error(f'{e.strerror} ({e.errno})')
 
 	def tag_glob(self):
 		self.prepare_action('tag_glob', 'tag: ', '*')

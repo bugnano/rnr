@@ -4,6 +4,7 @@
 import sys
 import os
 
+import re
 import argparse
 import functools
 
@@ -47,6 +48,9 @@ StyleFromToken = {
 	Token.Comment.Preproc: 'Namespace',
 	Token.Comment: 'Comment',
 }
+
+
+ReNewLine = re.compile(r'''(?:\r\n|[\r\n])$''')
 
 
 def masked_string(b):
@@ -220,6 +224,94 @@ class HexFileWalker(urwid.ListWalker):
 			self._modified()
 
 
+class TextFileWalker(urwid.ListWalker):
+	def __init__(self, fh, file_size, data, code, filename, tabsize):
+		self.fh = fh
+		self.file_size = file_size
+		self.data = data
+		self.code = code
+		self.filename = filename
+		self.tabsize = tabsize
+		self.lines = []
+		self.focus = 0
+
+		try:
+			name = self.filename.name
+			if name == name.upper():
+				filename = self.filename.parent / self.filename.name.lower()
+			else:
+				filename = self.filename
+
+			lexer = pygments.lexers.get_lexer_for_filename(filename, stripnl=False, tabsize=self.tabsize)
+		except pygments.util.ClassNotFound:
+			try:
+				lexer = pygments.lexers.guess_lexer(code, stripnl=False, tabsize=self.tabsize)
+			except pygments.util.ClassNotFound:
+				lexer = pygments.lexers.special.TextLexer(stripnl=False, tabsize=self.tabsize)
+
+		del self.lines[:]
+		line = []
+		result = pygments.lex(code, lexer)
+		for tokentype, value in result:
+			for k, v in StyleFromToken.items():
+				if tokentype in k:
+					style = v
+					break
+			else:
+				style = 'Text'
+
+			for l in value.splitlines(keepends=True):
+				if ReNewLine.search(l):
+					line.append((style, ReNewLine.sub('', l)))
+					self.lines.append(line)
+					line = []
+				else:
+					line.append((style, l))
+
+		self.len_lines = len(self.lines)
+		self.digits = len(str(self.len_lines))
+
+	def get_focus(self):
+		pos = self.focus
+		if (pos < 0) or (pos >= self.len_lines):
+			return (None, None)
+
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(self.lines[pos], wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+	def set_focus(self, position):
+		self.focus = position
+		self._modified()
+
+	def get_next(self, position):
+		pos = position + 1
+		if pos >= self.len_lines:
+			return (None, None)
+
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(self.lines[pos], wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+	def get_prev(self, position):
+		pos = position - 1
+		if pos < 0:
+			return (None, None)
+
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(self.lines[pos], wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+	def positions(self, reverse=False):
+		if reverse:
+			return range(self.len_lines - 1, -1, -1)
+		else:
+			return range(self.len_lines)
+
+	def change_size(self, size):
+		pass
+
+
 class FileViewListBox(urwid.ListBox):
 	def __init__(self, controller, filename, file_size, tabsize):
 		self.controller = controller
@@ -281,43 +373,9 @@ class FileViewListBox(urwid.ListBox):
 					self.text_file = False
 					return BinaryFileWalker(fh, self.file_size)
 
-		try:
-			name = self.filename.name
-			if name == name.upper():
-				filename = self.filename.parent / self.filename.name.lower()
-			else:
-				filename = self.filename
-
-			lexer = pygments.lexers.get_lexer_for_filename(filename, stripnl=False, tabsize=self.tabsize)
-		except pygments.util.ClassNotFound:
-			try:
-				lexer = pygments.lexers.guess_lexer(code, stripnl=False, tabsize=self.tabsize)
-			except pygments.util.ClassNotFound:
-				lexer = pygments.lexers.special.TextLexer(stripnl=False, tabsize=self.tabsize)
-
-		lines = []
-		line = []
-		result = pygments.lex(code, lexer)
-		for tokentype, value in result:
-			for k, v in StyleFromToken.items():
-				if tokentype in k:
-					style = v
-					break
-			else:
-				style = 'Text'
-
-			for l in value.splitlines(keepends=True):
-				if '\n' in l:
-					line.append((style, l.rstrip('\n')))
-					lines.append(line)
-					line = []
-				else:
-					line.append((style, l))
-
-		self.lines = lines
-		digits = len(str(len(lines)))
-		lst = [urwid.Columns([(digits, urwid.Text(('Lineno', f'{i+1}'), align='right')), urwid.Text(x, wrap='clip')], dividechars=1) for i, x in enumerate(lines)]
-		w = urwid.SimpleListWalker(lst)
+		w = TextFileWalker(fh, self.file_size, data, code, self.filename, self.tabsize)
+		self.lines = w.lines
+		self.len_lines = w.len_lines
 
 		return w
 
@@ -330,10 +388,7 @@ class FileViewListBox(urwid.ListBox):
 	def render(self, size, *args, **kwargs):
 		if size != self.old_size:
 			self.old_size = size
-			try:
-				self.body.change_size(size)
-			except AttributeError:
-				pass
+			self.body.change_size(size)
 
 		return super().render(size, *args, **kwargs)
 
@@ -344,10 +399,7 @@ class FileViewListBox(urwid.ListBox):
 			else:
 				self.body = self.walker
 
-			try:
-				self.body.change_size(size)
-			except AttributeError:
-				pass
+			self.body.change_size(size)
 
 			self._invalidate()
 		elif key in ('j', 'down'):
@@ -437,8 +489,8 @@ class Screen(urwid.WidgetWrap):
 			if pos >= self.list_box.file_size:
 				pos = self.list_box.file_size - 1
 		else:
-			if pos >= len(self.list_box.lines):
-				pos = len(self.list_box.lines) - 1
+			if pos >= self.list_box.len_lines:
+				pos = self.list_box.len_lines - 1
 
 		if pos < 0:
 			pos = 0

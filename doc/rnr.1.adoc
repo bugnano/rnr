@@ -138,10 +138,10 @@ _$XDG_CONFIG_HOME/rnr/config.py_::
 	The rnr(1) configuration file
 _$XDG_CONFIG_HOME/rnr/bookmarks_::
 	The currently saved bookmarks
-_/usr/bin/rnr::
+_/usr/bin/rnr_::
 	The main executable
-_/usr/bin/rnrview::
-	The internal viewer
+_/usr/bin/rnrview_::
+	The internal viewer as a standalone executable
 _/usr/share/rnr/rnr.fish_::
 	Copy this file to _~/.config/fish/functions/_ to cd to the last directory
 	when using the fish shell

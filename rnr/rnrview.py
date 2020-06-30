@@ -149,6 +149,18 @@ class BinaryFileWalker(urwid.ListWalker):
 		if self.line_width != old_width:
 			self._modified()
 
+	def get_focus_offset(self, offset):
+		position = self.focus
+		pos = position - (position % self.line_width)
+		pos += offset * self.line_width
+		if pos < 0:
+			return 0
+
+		if pos >= self.file_size:
+			pos = self.file_size - 1
+
+		return pos
+
 
 class HexFileWalker(urwid.ListWalker):
 	def __init__(self, fh, file_size):
@@ -222,6 +234,18 @@ class HexFileWalker(urwid.ListWalker):
 
 		if self.line_width != old_width:
 			self._modified()
+
+	def get_focus_offset(self, offset):
+		position = self.focus
+		pos = position - (position % self.line_width)
+		pos += offset * self.line_width
+		if pos < 0:
+			return 0
+
+		if pos >= self.file_size:
+			pos = self.file_size - 1
+
+		return pos
 
 
 class TextFileWalker(urwid.ListWalker):
@@ -311,6 +335,17 @@ class TextFileWalker(urwid.ListWalker):
 	def change_size(self, size):
 		pass
 
+	def get_focus_offset(self, offset):
+		pos = self.focus
+		pos += offset
+		if pos < 0:
+			return 0
+
+		if pos >= self.len_lines:
+			pos = self.len_lines - 1
+
+		return pos
+
 
 class FileViewListBox(urwid.ListBox):
 	def __init__(self, controller, filename, file_size, tabsize):
@@ -373,6 +408,17 @@ class FileViewListBox(urwid.ListBox):
 					self.text_file = False
 					return BinaryFileWalker(fh, self.file_size)
 
+		self.file_size = len(data)
+
+		lines_data = data.splitlines(keepends=True)
+		len_line = 0
+		self.line_offset = [len_line]
+		for line in lines_data:
+			len_line += len(line)
+			self.line_offset.append(len_line)
+
+		del self.line_offset[-1]
+
 		w = TextFileWalker(fh, self.file_size, data, code, self.filename, self.tabsize)
 		self.lines = w.lines
 		self.len_lines = w.len_lines
@@ -385,6 +431,21 @@ class FileViewListBox(urwid.ListBox):
 		else:
 			return True
 
+	def line_from_offset(self, offset):
+		low = 0;
+		high = len(self.line_offset) - 1
+		while low <= high:
+			mid = (low + high) // 2
+
+			if self.line_offset[mid] > offset:
+				high = mid - 1
+			elif self.line_offset[mid] < offset:
+				low = mid + 1
+			else:
+				return mid
+
+		return mid
+
 	def render(self, size, *args, **kwargs):
 		if size != self.old_size:
 			self.old_size = size
@@ -394,44 +455,69 @@ class FileViewListBox(urwid.ListBox):
 
 	def keypress(self, size, key):
 		if key in ('h', 'f4'):
+			prev_focus = self.focus_position
+
 			if self.body == self.walker:
 				self.body = self.hex_walker
+				if self.text_file:
+					self.set_focus(self.line_offset[prev_focus])
+				else:
+					self.set_focus(prev_focus)
 			else:
 				self.body = self.walker
+				if self.text_file:
+					self.set_focus(self.line_from_offset(prev_focus))
+				else:
+					self.set_focus(prev_focus)
+
+			if 'bottom'in self.ends_visible(size):
+				self.set_focus(self.body.get_focus_offset(self.file_size))
+				self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+
+			self.set_focus_valign('top')
 
 			self.body.change_size(size)
 
 			self._invalidate()
 		elif key in ('j', 'down'):
-			retval = super().keypress(size, 'down')
-			self._invalidate()
+			self.set_focus(self.body.get_focus_offset(1))
+			if 'bottom'in self.ends_visible(size):
+				self.set_focus(self.body.get_focus_offset(self.file_size))
+				self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
 
-			return retval
+			self.set_focus_valign('top')
+
+			self._invalidate()
 		elif key in ('k', 'up'):
-			retval = super().keypress(size, 'up')
-			self._invalidate()
+			self.set_focus(self.body.get_focus_offset(-1))
+			self.set_focus_valign('top')
 
-			return retval
+			self._invalidate()
 		elif key in ('g', 'home'):
-			retval = super().keypress(size, 'home')
-			self._invalidate()
+			self.set_focus(0)
+			self.set_focus_valign('top')
 
-			return retval
+			self._invalidate()
 		elif key in ('G', 'end'):
-			retval = super().keypress(size, 'end')
-			self._invalidate()
+			self.set_focus(self.body.get_focus_offset(self.file_size))
+			self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+			self.set_focus_valign('top')
 
-			return retval
+			self._invalidate()
 		elif key in ('ctrl b', 'page up'):
-			retval = super().keypress(size, 'page up')
-			self._invalidate()
+			self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+			self.set_focus_valign('top')
 
-			return retval
+			self._invalidate()
 		elif key in ('ctrl f', 'page down'):
-			retval = super().keypress(size, 'page down')
-			self._invalidate()
+			self.set_focus(self.body.get_focus_offset(max(size[1] - 1, 1)))
+			if 'bottom'in self.ends_visible(size):
+				self.set_focus(self.body.get_focus_offset(self.file_size))
+				self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
 
-			return retval
+			self.set_focus_valign('top')
+
+			self._invalidate()
 		else:
 			return super().keypress(size, key)
 

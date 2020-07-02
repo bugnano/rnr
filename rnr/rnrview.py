@@ -25,6 +25,7 @@ from .__main__ import PALETTE
 from .buttonbar import ButtonBar
 from .dlg_goto import DlgGoto
 from .dlg_error import DlgError
+from .dlg_search import DlgSearch
 from .utils import TildeLayout
 from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 
@@ -163,9 +164,10 @@ class BinaryFileWalker(urwid.ListWalker):
 
 
 class HexFileWalker(urwid.ListWalker):
-	def __init__(self, fh, file_size):
+	def __init__(self, fh, file_size, data=None):
 		self.fh = fh
 		self.file_size = file_size
+		self.data = data
 		self.focus = 0
 
 		len_address = len(hex(file_size - 1).split('x')[1])
@@ -182,8 +184,12 @@ class HexFileWalker(urwid.ListWalker):
 		if (pos < 0) or (pos >= self.file_size):
 			return (None, None)
 
-		self.fh.seek(pos)
-		data = self.fh.read(self.line_width)
+		if self.data:
+			data = self.data[pos:pos+self.line_width]
+		else:
+			self.fh.seek(pos)
+			data = self.fh.read(self.line_width)
+
 		h = hex_string(data)
 		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
 
@@ -198,8 +204,12 @@ class HexFileWalker(urwid.ListWalker):
 		if pos >= self.file_size:
 			return (None, None)
 
-		self.fh.seek(pos)
-		data = self.fh.read(self.line_width)
+		if self.data:
+			data = self.data[pos:pos+self.line_width]
+		else:
+			self.fh.seek(pos)
+			data = self.fh.read(self.line_width)
+
 		h = hex_string(data)
 		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
 
@@ -210,8 +220,12 @@ class HexFileWalker(urwid.ListWalker):
 		if pos < 0:
 			return (None, None)
 
-		self.fh.seek(pos)
-		data = self.fh.read(self.line_width)
+		if self.data:
+			data = self.data[pos:pos+self.line_width]
+		else:
+			self.fh.seek(pos)
+			data = self.fh.read(self.line_width)
+
 		h = hex_string(data)
 		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
 
@@ -384,8 +398,7 @@ class FileViewListBox(urwid.ListBox):
 			self.walker = self.read_text_file(fh, encoding)
 		else:
 			self.walker = BinaryFileWalker(fh, self.file_size)
-
-		self.hex_walker = HexFileWalker(fh, self.file_size)
+			self.hex_walker = HexFileWalker(fh, self.file_size)
 
 		self.old_size = None
 
@@ -394,6 +407,8 @@ class FileViewListBox(urwid.ListBox):
 	def read_text_file(self, fh, encoding):
 		fh.seek(0)
 		data = fh.read(MAX_TEXT_FILE_SIZE)
+
+		self.hex_walker = HexFileWalker(fh, len(data), data)
 
 		try:
 			code = data.decode(encoding)
@@ -584,6 +599,10 @@ class Screen(urwid.WidgetWrap):
 		self.list_box.set_focus(pos)
 		self.list_box.set_focus_valign('top')
 
+	def on_search(self, text, mode, flags):
+		self.close_dialog()
+		pass
+
 	def close_dialog(self):
 		self.pile.contents[1] = (self.center, self.pile.options())
 
@@ -636,6 +655,16 @@ def keypress(controller, key):
 
 		controller.screen.pile.contents[1] = (urwid.Overlay(DlgGoto(controller.screen, controller.screen.on_goto, lambda x: controller.screen.close_dialog(), label=label), controller.screen.center,
 			'center', 30,
+			'middle', 'pack',
+		), controller.screen.pile.options())
+	elif key in ('f7', '/', '?'):
+		if controller.screen.list_box.file_size == 0:
+			return
+
+		backwards = (key == '?')
+
+		controller.screen.pile.contents[1] = (urwid.Overlay(DlgSearch(controller.screen, controller.screen.on_search, lambda x: controller.screen.close_dialog(), text_file=not controller.screen.list_box.use_hex_offset(), backwards=backwards), controller.screen.center,
+			'center', 58,
 			'middle', 'pack',
 		), controller.screen.pile.options())
 

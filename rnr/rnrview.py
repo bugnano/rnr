@@ -5,6 +5,7 @@ import sys
 import os
 
 import re
+import fnmatch
 import argparse
 import functools
 
@@ -267,11 +268,13 @@ class TextFileWalker(urwid.ListWalker):
 		self.fh = fh
 		self.file_size = file_size
 		self.data = data
-		self.code = code
+		self.code = code.splitlines(keepends=True)
 		self.filename = filename
 		self.tabsize = tabsize
 		self.lines = []
 		self.focus = 0
+		self.search_expression = None
+		self.search_backwards = False
 
 		try:
 			name = self.filename.name
@@ -314,7 +317,9 @@ class TextFileWalker(urwid.ListWalker):
 		if (pos < 0) or (pos >= self.len_lines):
 			return (None, None)
 
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(self.lines[pos], wrap='clip')], dividechars=1)
+
+		line = self.highlight_line(pos, 'markselect')
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -327,7 +332,8 @@ class TextFileWalker(urwid.ListWalker):
 		if pos >= self.len_lines:
 			return (None, None)
 
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(self.lines[pos], wrap='clip')], dividechars=1)
+		line = self.highlight_line(pos, 'selected')
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -336,7 +342,8 @@ class TextFileWalker(urwid.ListWalker):
 		if pos < 0:
 			return (None, None)
 
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(self.lines[pos], wrap='clip')], dividechars=1)
+		line = self.highlight_line(pos, 'selected')
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -359,6 +366,97 @@ class TextFileWalker(urwid.ListWalker):
 			pos = self.len_lines - 1
 
 		return pos
+
+	def start_search(self, expression, backwards):
+		self.search_expression = expression
+		self.search_backwards = backwards
+		pos = None
+
+		if pos is None:
+			if backwards:
+				slice = self.code[self.focus::-1]
+			else:
+				slice = self.code[self.focus:]
+
+			for i, line in enumerate(slice):
+				if self.search_expression.search(line):
+					if backwards:
+						pos = self.focus - i
+					else:
+						pos = self.focus + i
+
+					break
+
+		if pos is None:
+			if backwards:
+				slice = self.code[:self.focus:-1]
+			else:
+				slice = self.code[:self.focus]
+
+			for i, line in enumerate(slice):
+				if self.search_expression.search(line):
+					if backwards:
+						pos = (len(self.code) - 1) - i
+					else:
+						pos = i
+
+					break
+
+		if pos is None:
+			self.search_expression = None
+
+		return pos
+
+	def highlight_line(self, pos, attr):
+		if not self.search_expression:
+			return self.lines[pos]
+
+		line = self.lines[pos]
+
+		len_part = 0
+		part_offset = []
+		for text_attr, text in line:
+			len_part += len(text)
+			part_offset.append(len_part)
+
+		raw_line = ''.join([x[1] for x in line])
+		new_line = []
+		start = 0
+		m = self.search_expression.search(raw_line, start)
+		while m:
+			match_start = m.start()
+			prev_offset = 0
+			for i, (text_attr, text) in enumerate(line):
+				if part_offset[i] <= start:
+					prev_offset = part_offset[i]
+					continue
+
+				if part_offset[i] < match_start:
+					new_line.append((text_attr, text[-(part_offset[i] - start):]))
+				else:
+					new_line.append((text_attr, text[max(0, start - prev_offset):match_start-prev_offset]))
+					break
+
+				prev_offset = part_offset[i]
+
+			new_line.append((attr, raw_line[match_start:m.end()]))
+
+			start = m.end()
+			m = self.search_expression.search(raw_line, start)
+
+		prev_offset = 0
+		for i, (text_attr, text) in enumerate(line):
+			if part_offset[i] <= start:
+				prev_offset = part_offset[i]
+				continue
+
+			new_line.append((text_attr, text[-(part_offset[i] - start):]))
+
+			prev_offset = part_offset[i]
+
+		new_line.append(('Text', ''))
+
+		return new_line
 
 
 class FileViewListBox(urwid.ListBox):
@@ -601,15 +699,45 @@ class Screen(urwid.WidgetWrap):
 
 	def on_search(self, text, mode, flags):
 		self.close_dialog()
-		pass
+
+		if not text:
+			return
+
+		if self.list_box.use_hex_offset():
+			expression = text
+			pass
+		else:
+			if mode == 'wildcard':
+				expression = fnmatch.translate(text)[:-2]
+			elif mode == 'normal':
+				expression = re.escape(text)
+			else:
+				expression = text
+
+			if flags.words:
+				expression = fr'\b{expression}\b'
+
+			if flags.case:
+				re_flags = 0
+			else:
+				re_flags = re.IGNORECASE
+
+			expression = re.compile(expression, re_flags)
+
+		pos = self.list_box.body.start_search(expression, flags.backwards)
+		if pos is not None:
+			self.list_box.set_focus(pos)
+			self.list_box.set_focus_valign('top')
+		else:
+			self.error('Search string not found', title='Search', error=False)
 
 	def close_dialog(self):
 		self.pile.contents[1] = (self.center, self.pile.options())
 
 		self.in_error = False
 
-	def error(self, e):
-		self.pile.contents[1] = (urwid.Overlay(DlgError(self, e), self.center,
+	def error(self, e, title='Error', error=True):
+		self.pile.contents[1] = (urwid.Overlay(DlgError(self, e, title, error), self.center,
 			'center', len(e) + 6,
 			'middle', 'pack',
 		), self.pile.options())

@@ -25,18 +25,25 @@ from .debug_print import (debug_print, debug_pprint)
 
 
 class DlgError(urwid.WidgetWrap):
-	def __init__(self, screen, e):
+	def __init__(self, screen, e, title='Error', error=True):
 		self.screen = screen
 
+		if error:
+			attr = 'error'
+			title_attr = 'error_title'
+		else:
+			attr = 'dialog'
+			title_attr = 'dialog_title'
+
 		w = urwid.Filler(urwid.Text(f' {e} ', align='center'), top=1, bottom=1)
-		w = urwid.LineBox(w, 'Error', title_attr='error_title')
+		w = urwid.LineBox(w, title, title_attr=title_attr)
 		w = urwid.Padding(w, left=1, right=1)
 		w = urwid.Pile([
 			(1, urwid.Filler(urwid.Text(' '))),
 			(5, w),
 			(1, urwid.Filler(urwid.Text(' '))),
 		])
-		w = urwid.AttrMap(w, 'error')
+		w = urwid.AttrMap(w, attr)
 
 		super().__init__(w)
 

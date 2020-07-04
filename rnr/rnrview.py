@@ -370,37 +370,7 @@ class TextFileWalker(urwid.ListWalker):
 	def start_search(self, expression, backwards):
 		self.search_expression = expression
 		self.search_backwards = backwards
-		pos = None
-
-		if pos is None:
-			if backwards:
-				slice = self.code[self.focus::-1]
-			else:
-				slice = self.code[self.focus:]
-
-			for i, line in enumerate(slice):
-				if self.search_expression.search(line):
-					if backwards:
-						pos = self.focus - i
-					else:
-						pos = self.focus + i
-
-					break
-
-		if pos is None:
-			if backwards:
-				slice = self.code[:self.focus:-1]
-			else:
-				slice = self.code[:self.focus]
-
-			for i, line in enumerate(slice):
-				if self.search_expression.search(line):
-					if backwards:
-						pos = (len(self.code) - 1) - i
-					else:
-						pos = i
-
-					break
+		pos = self.search_from_pos(self.focus, backwards)
 
 		if pos is None:
 			self.search_expression = None
@@ -408,6 +378,77 @@ class TextFileWalker(urwid.ListWalker):
 		self._modified()
 
 		return pos
+
+	def stop_search(self):
+		self.search_expression = None
+		self._modified()
+
+	def search_next(self):
+		if self.search_backwards:
+			pos = self.focus - 1
+			if pos < 0:
+				pos = self.len_lines - 1
+		else:
+			pos = self.focus + 1
+			if pos >= self.len_lines:
+				pos = 0
+
+		pos = self.search_from_pos(pos, self.search_backwards)
+
+		self._modified()
+
+		return pos
+
+	def search_prev(self):
+		if self.search_backwards:
+			pos = self.focus + 1
+			if pos >= self.len_lines:
+				pos = 0
+		else:
+			pos = self.focus - 1
+			if pos < 0:
+				pos = self.len_lines - 1
+
+		pos = self.search_from_pos(pos, not self.search_backwards)
+
+		self._modified()
+
+		return pos
+
+	def search_from_pos(self, pos, backwards):
+		new_pos = None
+
+		if new_pos is None:
+			if backwards:
+				slice = self.code[pos::-1]
+			else:
+				slice = self.code[pos:]
+
+			for i, line in enumerate(slice):
+				if self.search_expression.search(line):
+					if backwards:
+						new_pos = pos - i
+					else:
+						new_pos = pos + i
+
+					break
+
+		if new_pos is None:
+			if backwards:
+				slice = self.code[:pos:-1]
+			else:
+				slice = self.code[:pos]
+
+			for i, line in enumerate(slice):
+				if self.search_expression.search(line):
+					if backwards:
+						new_pos = (self.len_lines - 1) - i
+					else:
+						new_pos = i
+
+					break
+
+		return new_pos
 
 	def highlight_line(self, pos, attr):
 		if not self.search_expression:
@@ -439,7 +480,7 @@ class TextFileWalker(urwid.ListWalker):
 					if new_text:
 						new_line.append((text_attr, new_text))
 				else:
-					new_text = text[start-part_offset[i-1]:match_start-part_offset[i-1]]
+					new_text = text[max(start - part_offset[i-1], 0):match_start-part_offset[i-1]]
 					if new_text:
 						new_line.append((text_attr, new_text))
 
@@ -563,6 +604,28 @@ class FileViewListBox(urwid.ListBox):
 				return mid
 
 		return mid
+
+	def search_next(self):
+		if self.body.search_expression is None:
+			return
+
+		pos = self.body.search_next()
+		if pos is not None:
+			self.set_focus(pos)
+			self.set_focus_valign('top')
+		else:
+			self.controller.screen.error('Search string not found', title='Search', error=False)
+
+	def search_prev(self):
+		if self.body.search_expression is None:
+			return
+
+		pos = self.body.search_prev()
+		if pos is not None:
+			self.set_focus(pos)
+			self.set_focus_valign('top')
+		else:
+			self.controller.screen.error('Search string not found', title='Search', error=False)
 
 	def render(self, size, *args, **kwargs):
 		if size != self.old_size:
@@ -706,6 +769,7 @@ class Screen(urwid.WidgetWrap):
 		self.close_dialog()
 
 		if not text:
+			self.list_box.body.stop_search()
 			return
 
 		if self.list_box.use_hex_offset():
@@ -772,7 +836,9 @@ def keypress(controller, key):
 		controller.screen.close_dialog()
 		return
 
-	if key in ('q', 'Q', 'v', 'f3', 'f10'):
+	if key == 'esc':
+		controller.screen.list_box.body.stop_search()
+	elif key in ('q', 'Q', 'v', 'f3', 'f10'):
 		try:
 			controller.close_viewer()
 		except AttributeError:
@@ -800,6 +866,10 @@ def keypress(controller, key):
 			'center', 58,
 			'middle', 'pack',
 		), controller.screen.pile.options())
+	elif key == 'n':
+		controller.screen.list_box.search_next()
+	elif key == 'N':
+		controller.screen.list_box.search_prev()
 
 
 def main():

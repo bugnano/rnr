@@ -405,6 +405,8 @@ class TextFileWalker(urwid.ListWalker):
 		if pos is None:
 			self.search_expression = None
 
+		self._modified()
+
 		return pos
 
 	def highlight_line(self, pos, attr):
@@ -419,42 +421,45 @@ class TextFileWalker(urwid.ListWalker):
 			len_part += len(text)
 			part_offset.append(len_part)
 
+		part_offset.append(0)
+
 		raw_line = ''.join([x[1] for x in line])
 		new_line = []
 		start = 0
 		m = self.search_expression.search(raw_line, start)
 		while m:
 			match_start = m.start()
-			prev_offset = 0
+			match_end = m.end()
 			for i, (text_attr, text) in enumerate(line):
 				if part_offset[i] <= start:
-					prev_offset = part_offset[i]
 					continue
 
 				if part_offset[i] < match_start:
-					new_line.append((text_attr, text[-(part_offset[i] - start):]))
+					new_text = text[-(part_offset[i] - start):]
+					if new_text:
+						new_line.append((text_attr, new_text))
 				else:
-					new_line.append((text_attr, text[max(0, start - prev_offset):match_start-prev_offset]))
+					new_text = text[start-part_offset[i-1]:match_start-part_offset[i-1]]
+					if new_text:
+						new_line.append((text_attr, new_text))
+
 					break
 
-				prev_offset = part_offset[i]
+			new_line.append((attr, raw_line[match_start:match_end]))
 
-			new_line.append((attr, raw_line[match_start:m.end()]))
-
-			start = m.end()
+			start = match_end
 			m = self.search_expression.search(raw_line, start)
 
-		prev_offset = 0
 		for i, (text_attr, text) in enumerate(line):
 			if part_offset[i] <= start:
-				prev_offset = part_offset[i]
 				continue
 
-			new_line.append((text_attr, text[-(part_offset[i] - start):]))
+			new_text = text[-(part_offset[i] - start):]
+			if new_text:
+				new_line.append((text_attr, new_text))
 
-			prev_offset = part_offset[i]
-
-		new_line.append(('Text', ''))
+		if not new_line:
+			new_line.append(('Text', ''))
 
 		return new_line
 

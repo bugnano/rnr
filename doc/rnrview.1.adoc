@@ -1,0 +1,95 @@
+= RNRVIEW(1)
+:doctype: manpage
+:author: Franco Bugnano
+:man source: rnrview
+:man version: 0.3.0
+:man manual: rnr manual
+:revdate: 2020-06-08
+
+
+== NAME
+rnrview - Console file viewer
+
+
+== SYNOPSIS
+*rnrview* [_OPTIONS_] _FILE_
+
+
+== DESCRIPTION
+rnrview(1) is a text based file viewer that complements rnr(1)
+
+
+== OPTIONS
+*-h, --help*::
+	Show command line options
+*-V, --version*::
+	Show program's version number and exit
+*-b, --nocolor*::
+	Requests to run in black and white
+*-t* _TABSIZE_**, --tabsize** _TABSIZE_::
+	Set tab size (default: 4)
+*-d, --debug*::
+	Activate debug mode
+
+
+== KEY BINDINGS
+*ESC*:: Return to normal mode (like Vim)
+*q, Q, v, F3, F10*:: Exit
+*h, F4*:: Toggle Hex mode
+*j, DOWN*:: Scroll down a line
+*k, UP*:: Scroll up a line
+*g, HOME*:: Go to the top of the file
+*G, END*:: Go to the end of the file
+*CTRL-B, PAGE UP*:: Go up a page
+*CTRL-F, PAGE DOWN*:: Go down a page
+*:, F5*:: Go to line number / hex offset
+*/, ?, f, F7*:: Find in file
+*n*:: Find next
+*N*:: Find previous
+
+
+== FIND IN FILE
+=== REGULAR EXPRESSION
+rnrview(1) uses the Python dialect of regular expressions, as described in: <https://docs.python.org/3/howto/regex.html>
+
+The file will be tested against the regular expression on a line-by-line basis.
+
+=== WILDCARD SEARCH
+Wildcard search uses the following wildcards:
+
+***:: Matches everything
+*?*:: Matches any single character
+**[**_SEQ_**]**:: Matches any character in _SEQ_
+**[!**_SEQ_**]**:: Matches any character not in _SEQ_
+
+The file will be tested against the wildcard expression on a line-by-line basis.
+
+==== EXAMPLE
+sp* eg?s:: Search for "sp" followed by any number of characters, space, "eg", followed by one character, and "s".
+
+=== HEXADECIMAL
+When in hex mode, the search function accepts text in quotes and constant
+numbers. Text in quotes is matched exactly after removing the quotes. Each
+number matches one or more bytes. You can mix quoted text with constants like this:
+
+"String" 34 0xBB 012 "more text"
+
+Numbers are always interpreted in hex. In the example above, "34" is
+interpreted as 0x34. The prefix "0x" isn't really needed: we could type "BB"
+instead of "0xBB". And "012" is interpreted as 0x00 0x12, not as an octal number.
+
+
+== RESOURCES
+GitHub: <https://github.com/bugnano/rnr>
+
+PyPI: <https://pypi.org/project/rnr/>
+
+
+== SEE ALSO
+rnr(1)
+
+
+== COPYING
+Copyright \(C) 2020 Franco Bugnano. Free use of this software is
+granted under the terms of the GNU General Public License (GPL).
+

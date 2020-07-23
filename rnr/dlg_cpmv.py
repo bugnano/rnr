@@ -21,7 +21,7 @@ import os
 
 import urwid
 
-from .utils import (human_readable_size, format_seconds, TildeLayout)
+from .utils import (human_readable_size, format_seconds, TildeLayout, apply_template)
 
 
 class DlgCpMv(urwid.WidgetWrap):
@@ -30,7 +30,7 @@ class DlgCpMv(urwid.WidgetWrap):
 		self.on_ok = on_ok
 
 		label = urwid.Text(question, layout=TildeLayout)
-		self.edit = urwid.Edit(edit_text=dest_dir, wrap='clip')
+		self.edit = urwid.Edit(edit_text=dest_dir.replace('%', '%%'), wrap='clip')
 		w = urwid.AttrMap(self.edit, 'input', 'input')
 		w = urwid.SimpleFocusListWalker([
 			label,
@@ -141,5 +141,5 @@ class DlgCpMv(urwid.WidgetWrap):
 		else:
 			on_conflict = 'skip'
 
-		self.on_ok(self.edit.get_edit_text(), on_conflict)
+		self.on_ok(apply_template(self.edit.get_edit_text(), self.controller.screen, quote=False), on_conflict)
 

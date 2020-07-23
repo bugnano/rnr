@@ -19,21 +19,16 @@
 import sys
 import os
 
-import shlex
 import subprocess
 import signal
-import string
 
 from pathlib import Path
 
 import urwid
 
-from .utils import (tar_stem, tar_suffix)
+from .utils import (tar_stem, tar_suffix, apply_template)
 from .debug_print import (debug_print, debug_pprint)
 
-
-class Template(string.Template):
-	delimiter = '%'
 
 
 class CmdEdit(urwid.Edit):
@@ -161,16 +156,16 @@ class CmdBar(urwid.WidgetWrap):
 
 	def rename(self, file, mode):
 		self.file = file
-		text = file.name
+		text = file.name.replace('%', '%%')
 		if mode == 'replace':
 			text = ''
 			edit_pos = -1
 		elif mode == 'insert':
 			edit_pos = 0
 		elif mode == 'append_before':
-			edit_pos = len(tar_stem(file))
+			edit_pos = len(tar_stem(file).replace('%', '%%'))
 		elif mode == 'replace_before':
-			text = tar_suffix(file)
+			text = tar_suffix(file).replace('%', '%%')
 			edit_pos = 0
 		else:
 			edit_pos = -1
@@ -178,7 +173,7 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('rename', 'rename: ', text, edit_pos)
 
 	def do_rename(self):
-		new_name = Path(self.edit.get_edit_text())
+		new_name = Path(apply_template(self.edit.get_edit_text(), self.screen, quote=False))
 		try:
 			new_name = new_name.expanduser()
 		except RuntimeError:
@@ -226,60 +221,9 @@ class CmdBar(urwid.WidgetWrap):
 	def do_shell(self):
 		cwd = str(self.screen.center.focus.cwd)
 
-		try:
-			current_file = shlex.quote(str(self.screen.center.focus.get_focus()['file'].relative_to(cwd)))
-			current_name = shlex.quote(tar_stem(self.screen.center.focus.get_focus()['file']))
-			current_extension = shlex.quote(tar_suffix(self.screen.center.focus.get_focus()['file']))
-		except (TypeError, AttributeError):
-			current_file = shlex.quote('')
-			current_name = shlex.quote('')
-			current_extension = shlex.quote('')
-
-		current_tagged = ' '.join([shlex.quote(str(x.relative_to(cwd))) for x in self.screen.center.focus.get_tagged_files()])
-		if not current_tagged:
-			current_tagged = shlex.quote('')
-
-		if self.screen.center.focus == self.screen.left:
-			other = self.screen.right
-		else:
-			other = self.screen.left
-
-		other_cwd = str(other.cwd)
-
-		try:
-			other_file = shlex.quote(str(other.get_focus()['file']))
-			other_name = shlex.quote(tar_stem(other.get_focus()['file']))
-			other_extension = shlex.quote(tar_suffix(other.get_focus()['file']))
-		except (TypeError, AttributeError):
-			other_file = shlex.quote('')
-			other_name = shlex.quote('')
-			other_extension = shlex.quote('')
-
-		other_tagged = ' '.join([shlex.quote(str(x)) for x in other.get_tagged_files()])
-		if not current_tagged:
-			other_tagged = shlex.quote('')
-
-		s = Template(self.edit.get_edit_text())
-		d = {
-			'f': current_file,
-			'n': current_name,
-			'e': current_extension,
-			'd': shlex.quote(cwd),
-			'b': shlex.quote(Path(cwd).name),
-			's': current_tagged,
-			't': current_tagged,
-			'F': other_file,
-			'N': other_name,
-			'E': other_extension,
-			'D': shlex.quote(other_cwd),
-			'B': shlex.quote(Path(other_cwd).name),
-			'S': other_tagged,
-			'T': other_tagged,
-		}
-
 		self.controller.loop.stop()
 		prompt = ('$' if os.geteuid() else '#')
-		cmd = s.safe_substitute(d)
+		cmd = apply_template(self.edit.get_edit_text(), self.screen)
 		print(f'[{cwd}]{prompt} {cmd}')
 		subprocess.run(cmd, shell=True, cwd=cwd)
 		self.controller.loop.start()
@@ -289,12 +233,12 @@ class CmdBar(urwid.WidgetWrap):
 	def save(self, file, callback, forced_focus=True):
 		self.file = file
 		self.callback = callback
-		text = str(file)
-		edit_pos = len(str(file.parent))
+		text = str(file).replace('%', '%%')
+		edit_pos = len(str(file.parent).replace('%', '%%'))
 		self.prepare_action('save', 'save: ', text, edit_pos, forced_focus=forced_focus)
 
 	def do_save(self):
-		file = Path(self.edit.get_edit_text())
+		file = Path(apply_template(self.edit.get_edit_text(), self.screen, quote=False))
 		try:
 			file = file.expanduser()
 		except RuntimeError:

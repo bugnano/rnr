@@ -87,17 +87,172 @@ class TopBar(urwid.WidgetWrap):
 
 
 class BinaryFileWalker(urwid.ListWalker):
-	def __init__(self, fh, file_size):
+	def __init__(self, fh, file_size, data=None):
 		self.fh = fh
 		self.file_size = file_size
+		self.data = data
 		self.focus = 0
+		self.search_expression = None
+		self.search_backwards = False
 
 		len_address = len(hex(file_size - 1).split('x')[1])
 		len_address += len_address % 2
 		self.len_address = max(len_address, 8)
 		self.fmt_address = f'%0{self.len_address}X'
 
+	def set_focus(self, position):
+		self.focus = position
+		self._modified()
+
+	def positions(self, reverse=False):
+		if reverse:
+			return range(self.file_size - 1, -1, -1)
+		else:
+			return range(self.file_size)
+
+	def get_focus_offset(self, offset):
+		position = self.focus
+		pos = position - (position % self.line_width)
+		pos += offset * self.line_width
+		if pos < 0:
+			return 0
+
+		if pos >= self.file_size:
+			pos = self.file_size - 1
+
+		return pos
+
+	def start_search(self, expression, backwards):
+		self.search_expression = expression
+		self.search_backwards = backwards
+		pos = self.search_from_pos(self.focus, backwards)
+
+		if pos is None:
+			self.search_expression = None
+
+		self._modified()
+
+		return pos
+
+	def stop_search(self):
+		self.search_expression = None
+		self._modified()
+
+	def search_next(self):
+		if self.search_backwards:
+			pos = self.focus - self.line_width
+			if pos < 0:
+				pos = self.file_size - 1
+		else:
+			pos = self.focus + self.line_width
+			if pos >= self.file_size:
+				pos = 0
+
+		pos = self.search_from_pos(pos, self.search_backwards)
+
+		self._modified()
+
+		return pos
+
+	def search_prev(self):
+		if self.search_backwards:
+			pos = self.focus + self.line_width
+			if pos >= self.file_size:
+				pos = 0
+		else:
+			pos = self.focus - self.line_width
+			if pos < 0:
+				pos = self.file_size - 1
+
+		pos = self.search_from_pos(pos, not self.search_backwards)
+
+		self._modified()
+
+		return pos
+
+	def search_from_pos(self, pos, backwards):
+		pos = pos - (pos % self.line_width)
+		starting_pos = pos
+		new_pos = None
+
+		block_size = 131072
+
+		if new_pos is None:
+			data = b''
+			if backwards:
+				while pos >= 0:
+					old_data = data[:len(self.search_expression)]
+					if self.data:
+						data = self.data[max(0, pos - block_size):pos] + old_data
+					else:
+						self.fh.seek(max(0, pos - block_size))
+						data = self.fh.read(block_size) + old_data
+
+					i = data.rfind(self.search_expression)
+					if i >= 0:
+						new_pos = ((pos + len(old_data)) - len(data)) + i
+						break
+
+					pos -= block_size
+			else:
+				while pos < self.file_size:
+					old_data = data[-len(self.search_expression):]
+					if self.data:
+						data = old_data + self.data[pos:pos+block_size]
+					else:
+						self.fh.seek(pos)
+						data = old_data + self.fh.read(block_size)
+
+					i = data.find(self.search_expression)
+					if i >= 0:
+						new_pos = (pos - len(old_data)) + i
+						break
+
+					pos += block_size
+
+		if new_pos is None:
+			data = b''
+			if backwards:
+				pos = self.file_size - 1
+				while pos >= starting_pos:
+					old_data = data[:len(self.search_expression)]
+					if self.data:
+						data = self.data[max(0, pos - block_size):pos] + old_data
+					else:
+						self.fh.seek(max(0, pos - block_size))
+						data = self.fh.read(block_size) + old_data
+
+					i = data.rfind(self.search_expression)
+					if i >= 0:
+						new_pos = ((pos + len(old_data)) - len(data)) + i
+						break
+
+					pos -= block_size
+
+			else:
+				pos = 0
+				while pos < starting_pos:
+					old_data = data[-len(self.search_expression):]
+					if self.data:
+						data = old_data + self.data[pos:pos+block_size]
+					else:
+						self.fh.seek(pos)
+						data = old_data + self.fh.read(block_size)
+
+					i = data.find(self.search_expression)
+					if i >= 0:
+						new_pos = (pos - len(old_data)) + i
+						break
+
+					pos += block_size
+
+		return new_pos
+
+
+class DumpFileWalker(BinaryFileWalker):
+	def __init__(self, fh, file_size, data=None):
 		self.line_width = 64
+		super().__init__(fh, file_size, data)
 
 	def get_focus(self):
 		position = self.focus
@@ -105,22 +260,28 @@ class BinaryFileWalker(urwid.ListWalker):
 		if (pos < 0) or (pos >= self.file_size):
 			return (None, None)
 
-		self.fh.seek(pos)
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+		if self.data:
+			data = self.data[pos:pos+self.line_width]
+		else:
+			self.fh.seek(pos)
+			data = self.fh.read(self.line_width)
+
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(data), wrap='clip')], dividechars=1)
 
 		return (w, pos)
-
-	def set_focus(self, position):
-		self.focus = position
-		self._modified()
 
 	def get_next(self, position):
 		pos = (position - (position % self.line_width)) + self.line_width
 		if pos >= self.file_size:
 			return (None, None)
 
-		self.fh.seek(pos)
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+		if self.data:
+			data = self.data[pos:pos+self.line_width]
+		else:
+			self.fh.seek(pos)
+			data = self.fh.read(self.line_width)
+
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(data), wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -129,16 +290,15 @@ class BinaryFileWalker(urwid.ListWalker):
 		if pos < 0:
 			return (None, None)
 
-		self.fh.seek(pos)
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(self.fh.read(self.line_width)), wrap='clip')], dividechars=1)
+		if self.data:
+			data = self.data[pos:pos+self.line_width]
+		else:
+			self.fh.seek(pos)
+			data = self.fh.read(self.line_width)
+
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(data), wrap='clip')], dividechars=1)
 
 		return (w, pos)
-
-	def positions(self, reverse=False):
-		if reverse:
-			return range(self.file_size - 1, -1, -1)
-		else:
-			return range(self.file_size)
 
 	def change_size(self, size):
 		width = size[0]
@@ -151,33 +311,12 @@ class BinaryFileWalker(urwid.ListWalker):
 		if self.line_width != old_width:
 			self._modified()
 
-	def get_focus_offset(self, offset):
-		position = self.focus
-		pos = position - (position % self.line_width)
-		pos += offset * self.line_width
-		if pos < 0:
-			return 0
 
-		if pos >= self.file_size:
-			pos = self.file_size - 1
-
-		return pos
-
-
-class HexFileWalker(urwid.ListWalker):
+class HexFileWalker(BinaryFileWalker):
 	def __init__(self, fh, file_size, data=None):
-		self.fh = fh
-		self.file_size = file_size
-		self.data = data
-		self.focus = 0
-
-		len_address = len(hex(file_size - 1).split('x')[1])
-		len_address += len_address % 2
-		self.len_address = max(len_address, 8)
-		self.fmt_address = f'%0{self.len_address}X'
-
 		self.line_width = 16
 		self.hex_width = int(self.line_width / 4) * 13
+		super().__init__(fh, file_size, data)
 
 	def get_focus(self):
 		position = self.focus
@@ -195,10 +334,6 @@ class HexFileWalker(urwid.ListWalker):
 		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
 
 		return (w, pos)
-
-	def set_focus(self, position):
-		self.focus = position
-		self._modified()
 
 	def get_next(self, position):
 		pos = (position - (position % self.line_width)) + self.line_width
@@ -232,12 +367,6 @@ class HexFileWalker(urwid.ListWalker):
 
 		return (w, pos)
 
-	def positions(self, reverse=False):
-		if reverse:
-			return range(self.file_size - 1, -1, -1)
-		else:
-			return range(self.file_size)
-
 	def change_size(self, size):
 		width = size[0]
 		old_width = self.line_width
@@ -249,18 +378,6 @@ class HexFileWalker(urwid.ListWalker):
 
 		if self.line_width != old_width:
 			self._modified()
-
-	def get_focus_offset(self, offset):
-		position = self.focus
-		pos = position - (position % self.line_width)
-		pos += offset * self.line_width
-		if pos < 0:
-			return 0
-
-		if pos >= self.file_size:
-			pos = self.file_size - 1
-
-		return pos
 
 
 class TextFileWalker(urwid.ListWalker):
@@ -541,7 +658,7 @@ class FileViewListBox(urwid.ListBox):
 		if text_file:
 			self.walker = self.read_text_file(fh, encoding)
 		else:
-			self.walker = BinaryFileWalker(fh, self.file_size)
+			self.walker = DumpFileWalker(fh, self.file_size)
 			self.hex_walker = HexFileWalker(fh, self.file_size)
 
 		self.old_size = None
@@ -558,14 +675,14 @@ class FileViewListBox(urwid.ListBox):
 			code = data.decode(encoding)
 		except UnicodeDecodeError:
 			if encoding == 'windows-1252':
-				return BinaryFileWalker(fh, self.file_size)
+				return DumpFileWalker(fh, self.file_size)
 			else:
 				try:
 					encoding = 'windows-1252'
 					code = data.decode(encoding)
 				except UnicodeDecodeError:
 					self.text_file = False
-					return BinaryFileWalker(fh, self.file_size)
+					return DumpFileWalker(fh, self.file_size)
 
 		self.file_size = len(data)
 
@@ -609,10 +726,18 @@ class FileViewListBox(urwid.ListBox):
 		if self.body.search_expression is None:
 			return
 
+		self.controller.screen.error('Searching...', title='Search', error=False)
+		self.controller.loop.draw_screen()
+
 		pos = self.body.search_next()
+
+		self.controller.screen.close_dialog()
+		self.controller.loop.draw_screen()
+
 		if pos is not None:
 			self.set_focus(pos)
 			self.set_focus_valign('top')
+			self._invalidate()
 		else:
 			self.controller.screen.error('Search string not found', title='Search', error=False)
 
@@ -620,10 +745,18 @@ class FileViewListBox(urwid.ListBox):
 		if self.body.search_expression is None:
 			return
 
+		self.controller.screen.error('Searching...', title='Search', error=False)
+		self.controller.loop.draw_screen()
+
 		pos = self.body.search_prev()
+
+		self.controller.screen.close_dialog()
+		self.controller.loop.draw_screen()
+
 		if pos is not None:
 			self.set_focus(pos)
 			self.set_focus_valign('top')
+			self._invalidate()
 		else:
 			self.controller.screen.error('Search string not found', title='Search', error=False)
 
@@ -773,8 +906,32 @@ class Screen(urwid.WidgetWrap):
 			return
 
 		if self.list_box.use_hex_offset():
-			expression = text
-			pass
+			if flags.hex:
+				parts = []
+				use_hex_value = True
+				for part in text.split('"'):
+					if use_hex_value:
+						for hex_part in part.split():
+							hex_value = hex_part
+							if hex_value.startswith('0x') or hex_value.startswith('0X'):
+								hex_value = hex_value[2:]
+
+							if len(hex_value) % 2:
+								hex_value = f'0{hex_value}'
+
+							try:
+								parts.append(bytes.fromhex(hex_value))
+							except ValueError:
+								self.error(f'Hex pattern error: {hex_part}', title='Search', error=False)
+								return
+					else:
+						parts.append(part.encode(sys.getdefaultencoding()))
+
+					use_hex_value = not use_hex_value
+
+				expression = b''.join(parts)
+			else:
+				expression = text.encode(sys.getdefaultencoding())
 		else:
 			if mode == 'wildcard':
 				expression = fnmatch.translate(text)[:-2]
@@ -793,10 +950,18 @@ class Screen(urwid.WidgetWrap):
 
 			expression = re.compile(expression, re_flags)
 
+		self.error('Searching...', title='Search', error=False)
+		self.controller.loop.draw_screen()
+
 		pos = self.list_box.body.start_search(expression, flags.backwards)
+
+		self.close_dialog()
+		self.controller.loop.draw_screen()
+
 		if pos is not None:
 			self.list_box.set_focus(pos)
 			self.list_box.set_focus_valign('top')
+			self.list_box._invalidate()
 		else:
 			self.error('Search string not found', title='Search', error=False)
 
@@ -843,7 +1008,7 @@ def keypress(controller, key):
 			controller.close_viewer()
 		except AttributeError:
 			raise urwid.ExitMainLoop()
-	elif key == 'f5':
+	elif key in (':', 'f5'):
 		if controller.screen.list_box.file_size == 0:
 			return
 
@@ -856,7 +1021,7 @@ def keypress(controller, key):
 			'center', 30,
 			'middle', 'pack',
 		), controller.screen.pile.options())
-	elif key in ('f7', '/', '?'):
+	elif key in ('/', '?', 'f', 'f7'):
 		if controller.screen.list_box.file_size == 0:
 			return
 

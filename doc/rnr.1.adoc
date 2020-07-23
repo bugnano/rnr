@@ -105,8 +105,8 @@ https://ranger.github.io/[Ranger]
 *:, !*:: Execute a shell command
 
 
-== SHELL SUBSTITUTIONS
-The following substitutions are available for the *!* command:
+== SUBSTITUTIONS
+The following substitutions are available for the shell, rename, copy and move commands:
 
 _%f_:: The current file
 _%n_:: The current file name without extension
@@ -127,6 +127,7 @@ There is no need to enclose these substitutions in quotes
 === EXAMPLE
 
 **!**mpv _%t_:: Opens the tagged files with mpv
+
 
 == FILES
 rnr(1) respects the XDG Base Directory specification.
@@ -149,10 +150,15 @@ _/usr/share/rnr/rnr.sh_::
 	Source this file in _~/.bashrc_ to cd to the last directory when using
 	bash
 
+
 == RESOURCES
 GitHub: <https://github.com/bugnano/rnr>
 
 PyPI: <https://pypi.org/project/rnr/>
+
+
+== SEE ALSO
+rnrview(1)
 
 
 == COPYING

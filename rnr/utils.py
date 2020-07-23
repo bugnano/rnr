@@ -20,6 +20,8 @@ import sys
 import os
 
 import datetime
+import string
+import shlex
 
 from pathlib import Path
 
@@ -73,6 +75,7 @@ def tar_suffix(file):
 	else:
 		return p.suffix
 
+
 class TildeTextLayout(urwid.TextLayout):
 	def layout(self, text, width, align, wrap):
 		if len(text) <= width:
@@ -121,6 +124,7 @@ class TLineWidget(urwid.WidgetWrap):
 	def set_title_attr(self, attr):
 		self.title_attr.set_attr_map({None: attr})
 
+
 class InterruptError(Exception):
 	pass
 
@@ -129,4 +133,69 @@ class AbortedError(Exception):
 
 class SkippedError(Exception):
 	pass
+
+
+class Template(string.Template):
+	delimiter = '%'
+
+def apply_template(text, screen, quote=True):
+	if quote:
+		fn_quote = shlex.quote
+	else:
+		fn_quote = str
+
+	cwd = str(screen.center.focus.cwd)
+
+	try:
+		current_file = fn_quote(str(screen.center.focus.get_focus()['file'].relative_to(cwd)))
+		current_name = fn_quote(tar_stem(screen.center.focus.get_focus()['file']))
+		current_extension = fn_quote(tar_suffix(screen.center.focus.get_focus()['file']))
+	except (TypeError, AttributeError):
+		current_file = fn_quote('')
+		current_name = fn_quote('')
+		current_extension = fn_quote('')
+
+	current_tagged = ' '.join([fn_quote(str(x.relative_to(cwd))) for x in screen.center.focus.get_tagged_files()])
+	if not current_tagged:
+		current_tagged = fn_quote('')
+
+	if screen.center.focus == screen.left:
+		other = screen.right
+	else:
+		other = screen.left
+
+	other_cwd = str(other.cwd)
+
+	try:
+		other_file = fn_quote(str(other.get_focus()['file']))
+		other_name = fn_quote(tar_stem(other.get_focus()['file']))
+		other_extension = fn_quote(tar_suffix(other.get_focus()['file']))
+	except (TypeError, AttributeError):
+		other_file = fn_quote('')
+		other_name = fn_quote('')
+		other_extension = fn_quote('')
+
+	other_tagged = ' '.join([fn_quote(str(x)) for x in other.get_tagged_files()])
+	if not current_tagged:
+		other_tagged = fn_quote('')
+
+	s = Template(text)
+	d = {
+		'f': current_file,
+		'n': current_name,
+		'e': current_extension,
+		'd': fn_quote(cwd),
+		'b': fn_quote(Path(cwd).name),
+		's': current_tagged,
+		't': current_tagged,
+		'F': other_file,
+		'N': other_name,
+		'E': other_extension,
+		'D': fn_quote(other_cwd),
+		'B': fn_quote(Path(other_cwd).name),
+		'S': other_tagged,
+		'T': other_tagged,
+	}
+
+	return s.safe_substitute(d)
 

@@ -35,13 +35,13 @@ rnrview(1) is a text based file viewer that complements rnr(1)
 == KEY BINDINGS
 *ESC*:: Return to normal mode (like Vim)
 *q, Q, v, F3, F10*:: Exit
-*h, F4*:: Toggle Hex mode
 *j, DOWN*:: Scroll down a line
 *k, UP*:: Scroll up a line
 *g, HOME*:: Go to the top of the file
 *G, END*:: Go to the end of the file
 *CTRL-B, PAGE UP*:: Go up a page
 *CTRL-F, PAGE DOWN*:: Go down a page
+*h, F4*:: Toggle Hex mode
 *:, F5*:: Go to line number / hex offset
 */, ?, f, F7*:: Find in file
 *n*:: Find next

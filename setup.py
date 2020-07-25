@@ -11,6 +11,7 @@ with open('requirements.txt', 'r') as fh:
 	requirements = [x.strip() for x in fh if x.strip()]
 
 subprocess.run(['a2x', '-f', 'manpage', 'doc/rnr.1.adoc'])
+subprocess.run(['a2x', '-f', 'manpage', 'doc/rnrview.1.adoc'])
 
 setuptools.setup(
 	name='rnr',
@@ -29,6 +30,7 @@ setuptools.setup(
 		]),
 		('man/man1', [
 			'doc/rnr.1',
+			'doc/rnrview.1',
 		])
 	],
 	entry_points={

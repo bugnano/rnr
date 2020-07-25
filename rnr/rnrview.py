@@ -55,28 +55,53 @@ StyleFromToken = {
 ReNewLine = re.compile(r'''(?:\r\n|[\r\n])$''')
 
 
-def masked_string(b):
+def masked_string(b, attr_normal, attr_highlight):
 	chars = []
-	for x in b:
-		if (x < 0x20) or (x >= 0x7F):
-			chars.append(NON_PRINTABLE_MASK)
+	for highlight, data in b:
+		tmp = []
+		for x in data:
+			if (x < 0x20) or (x >= 0x7F):
+				tmp.append(NON_PRINTABLE_MASK)
+			else:
+				tmp.append(chr(x))
+
+		if highlight:
+			chars.append((attr_highlight, ''.join(tmp)))
 		else:
-			chars.append(chr(x))
+			chars.append((attr_normal, ''.join(tmp)))
 
-	return ''.join(chars)
+	return chars
 
 
-def hex_string(b):
+def hex_string(b, attr_normal, attr_highlight):
 	chars = []
-	for i, e in enumerate(b):
-		if (i % 4) == 0:
-			fmt = ' %02X '
+	i = 0
+
+	for highlight, data in b:
+		if highlight:
+			for e in data:
+				if (i % 4) == 0:
+					chars.append((attr_normal, ' '))
+
+				chars.append((attr_highlight, '%02X' % e))
+				chars.append((attr_normal, ' '))
+
+				i += 1
 		else:
-			fmt = '%02X '
+			tmp = []
+			for e in data:
+				if (i % 4) == 0:
+					fmt = ' %02X '
+				else:
+					fmt = '%02X '
 
-		chars.append(fmt % e)
+				tmp.append(fmt % e)
 
-	return ''.join(chars)
+				i += 1
+
+			chars.append((attr_normal, ''.join(tmp)))
+
+	return chars
 
 
 class TopBar(urwid.WidgetWrap):
@@ -94,6 +119,8 @@ class BinaryFileWalker(urwid.ListWalker):
 		self.focus = 0
 		self.search_expression = None
 		self.search_backwards = False
+		self.highligh_buffer = None
+		self.highligh_buffer_pos = None
 
 		len_address = len(hex(file_size - 1).split('x')[1])
 		len_address += len_address % 2
@@ -125,7 +152,9 @@ class BinaryFileWalker(urwid.ListWalker):
 	def start_search(self, expression, backwards):
 		self.search_expression = expression
 		self.search_backwards = backwards
-		pos = self.search_from_pos(self.focus, backwards)
+		position = self.focus
+		position = position - (position % self.line_width)
+		pos = self.search_from_pos(position, backwards)
 
 		if pos is None:
 			self.search_expression = None
@@ -140,11 +169,15 @@ class BinaryFileWalker(urwid.ListWalker):
 
 	def search_next(self):
 		if self.search_backwards:
-			pos = self.focus - self.line_width
+			position = self.focus
+			position = position - (position % self.line_width)
+			pos = position - 1
 			if pos < 0:
 				pos = self.file_size - 1
 		else:
-			pos = self.focus + self.line_width
+			position = self.focus
+			position = position - (position % self.line_width)
+			pos = position + self.line_width
 			if pos >= self.file_size:
 				pos = 0
 
@@ -156,11 +189,15 @@ class BinaryFileWalker(urwid.ListWalker):
 
 	def search_prev(self):
 		if self.search_backwards:
-			pos = self.focus + self.line_width
+			position = self.focus
+			position = position - (position % self.line_width)
+			pos = position + self.line_width
 			if pos >= self.file_size:
 				pos = 0
 		else:
-			pos = self.focus - self.line_width
+			position = self.focus
+			position = position - (position % self.line_width)
+			pos = position - 1
 			if pos < 0:
 				pos = self.file_size - 1
 
@@ -171,22 +208,26 @@ class BinaryFileWalker(urwid.ListWalker):
 		return pos
 
 	def search_from_pos(self, pos, backwards):
-		pos = pos - (pos % self.line_width)
 		starting_pos = pos
 		new_pos = None
 
 		block_size = 131072
 
 		if new_pos is None:
-			data = b''
 			if backwards:
+				if self.data:
+					data = self.data[pos:pos+len(self.search_expression)]
+				else:
+					self.fh.seek(pos)
+					data = self.fh.read(len(self.search_expression))
+
 				while pos >= 0:
 					old_data = data[:len(self.search_expression)]
 					if self.data:
 						data = self.data[max(0, pos - block_size):pos] + old_data
 					else:
 						self.fh.seek(max(0, pos - block_size))
-						data = self.fh.read(block_size) + old_data
+						data = self.fh.read(min(pos, block_size)) + old_data
 
 					i = data.rfind(self.search_expression)
 					if i >= 0:
@@ -195,6 +236,7 @@ class BinaryFileWalker(urwid.ListWalker):
 
 					pos -= block_size
 			else:
+				data = b''
 				while pos < self.file_size:
 					old_data = data[-len(self.search_expression):]
 					if self.data:
@@ -220,7 +262,7 @@ class BinaryFileWalker(urwid.ListWalker):
 						data = self.data[max(0, pos - block_size):pos] + old_data
 					else:
 						self.fh.seek(max(0, pos - block_size))
-						data = self.fh.read(block_size) + old_data
+						data = self.fh.read(min(pos, block_size)) + old_data
 
 					i = data.rfind(self.search_expression)
 					if i >= 0:
@@ -248,6 +290,57 @@ class BinaryFileWalker(urwid.ListWalker):
 
 		return new_pos
 
+	def highlight_line(self, pos):
+		if self.search_expression:
+			len_expression = len(self.search_expression)
+		else:
+			len_expression = 0
+
+		starting_pos = max(pos - len_expression, 0)
+		end_pos = min(pos + self.line_width, self.file_size)
+		block_size = 131072
+
+		if (self.highligh_buffer_pos is None) or (self.highligh_buffer_pos > starting_pos) or ((len(self.highligh_buffer) - (pos - self.highligh_buffer_pos)) < max(self.line_width, len_expression)):
+			if self.data:
+				self.highligh_buffer = self.data[starting_pos:starting_pos+block_size]
+			else:
+				self.fh.seek(starting_pos)
+				self.highligh_buffer = self.fh.read(block_size)
+
+			self.highligh_buffer_pos = starting_pos
+
+		ranges_to_highlight = []
+
+		if self.search_expression:
+			search_pos = starting_pos
+			while search_pos < end_pos:
+				i = self.highligh_buffer.find(self.search_expression, search_pos - self.highligh_buffer_pos)
+				if (i >= 0) and (i < (end_pos - self.highligh_buffer_pos)):
+					ranges_to_highlight.append([max(self.highligh_buffer_pos + i, pos), min(self.highligh_buffer_pos + i + len_expression, end_pos)])
+				else:
+					break
+
+				search_pos = self.highligh_buffer_pos + i + len_expression
+
+		line = []
+		if ranges_to_highlight:
+			for i, e in enumerate(ranges_to_highlight):
+				if i == 0:
+					line.append([False, self.highligh_buffer[pos-self.highligh_buffer_pos:e[0]-self.highligh_buffer_pos]])
+				else:
+					line.append([False, self.highligh_buffer[ranges_to_highlight[i-1][1]-self.highligh_buffer_pos:e[0]-self.highligh_buffer_pos]])
+
+				line.append([True, self.highligh_buffer[e[0]-self.highligh_buffer_pos:e[1]-self.highligh_buffer_pos]])
+
+			chunk_pos = ranges_to_highlight[-1][1] - self.highligh_buffer_pos
+			used_line = sum([len(x[1]) for x in line])
+			line.append([False, self.highligh_buffer[chunk_pos:chunk_pos+(self.line_width-used_line)]])
+		else:
+			chunk_pos = pos-self.highligh_buffer_pos
+			line.append([False, self.highligh_buffer[chunk_pos:chunk_pos+self.line_width]])
+
+		return [x for x in line if x[1]]
+
 
 class DumpFileWalker(BinaryFileWalker):
 	def __init__(self, fh, file_size, data=None):
@@ -260,13 +353,8 @@ class DumpFileWalker(BinaryFileWalker):
 		if (pos < 0) or (pos >= self.file_size):
 			return (None, None)
 
-		if self.data:
-			data = self.data[pos:pos+self.line_width]
-		else:
-			self.fh.seek(pos)
-			data = self.fh.read(self.line_width)
-
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(data), wrap='clip')], dividechars=1)
+		line = self.highlight_line(pos)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(line, 'Text', 'markselect'), wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -275,13 +363,8 @@ class DumpFileWalker(BinaryFileWalker):
 		if pos >= self.file_size:
 			return (None, None)
 
-		if self.data:
-			data = self.data[pos:pos+self.line_width]
-		else:
-			self.fh.seek(pos)
-			data = self.fh.read(self.line_width)
-
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(data), wrap='clip')], dividechars=1)
+		line = self.highlight_line(pos)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(line, 'Text', 'selected'), wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -290,13 +373,8 @@ class DumpFileWalker(BinaryFileWalker):
 		if pos < 0:
 			return (None, None)
 
-		if self.data:
-			data = self.data[pos:pos+self.line_width]
-		else:
-			self.fh.seek(pos)
-			data = self.fh.read(self.line_width)
-
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(data), wrap='clip')], dividechars=1)
+		line = self.highlight_line(pos)
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), urwid.Text(masked_string(line, 'Text', 'selected'), wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -324,14 +402,9 @@ class HexFileWalker(BinaryFileWalker):
 		if (pos < 0) or (pos >= self.file_size):
 			return (None, None)
 
-		if self.data:
-			data = self.data[pos:pos+self.line_width]
-		else:
-			self.fh.seek(pos)
-			data = self.fh.read(self.line_width)
-
-		h = hex_string(data)
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
+		line = self.highlight_line(pos)
+		h = hex_string(line, 'Text', 'markselect')
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(h)), urwid.Text([('Operator', '|'), *masked_string(line, 'String', 'markselect'), ('Operator', '|')], wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -340,14 +413,9 @@ class HexFileWalker(BinaryFileWalker):
 		if pos >= self.file_size:
 			return (None, None)
 
-		if self.data:
-			data = self.data[pos:pos+self.line_width]
-		else:
-			self.fh.seek(pos)
-			data = self.fh.read(self.line_width)
-
-		h = hex_string(data)
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
+		line = self.highlight_line(pos)
+		h = hex_string(line, 'Text', 'selected')
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(h)), urwid.Text([('Operator', '|'), *masked_string(line, 'String', 'selected'), ('Operator', '|')], wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -356,14 +424,9 @@ class HexFileWalker(BinaryFileWalker):
 		if pos < 0:
 			return (None, None)
 
-		if self.data:
-			data = self.data[pos:pos+self.line_width]
-		else:
-			self.fh.seek(pos)
-			data = self.fh.read(self.line_width)
-
-		h = hex_string(data)
-		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(('Text', h))), urwid.Text([('Operator', '|'), ('String', masked_string(data)), ('Operator', '|')], wrap='clip')], dividechars=1)
+		line = self.highlight_line(pos)
+		h = hex_string(line, 'Text', 'selected')
+		w = urwid.Columns([(self.len_address, urwid.Text(('Lineno', self.fmt_address % (pos)), align='right')), (self.hex_width, urwid.Text(h)), urwid.Text([('Operator', '|'), *masked_string(line, 'String', 'selected'), ('Operator', '|')], wrap='clip')], dividechars=1)
 
 		return (w, pos)
 
@@ -903,6 +966,7 @@ class Screen(urwid.WidgetWrap):
 
 		if not text:
 			self.list_box.body.stop_search()
+			self.list_box._invalidate()
 			return
 
 		if self.list_box.use_hex_offset():
@@ -1003,6 +1067,7 @@ def keypress(controller, key):
 
 	if key == 'esc':
 		controller.screen.list_box.body.stop_search()
+		controller.screen.list_box._invalidate()
 	elif key in ('q', 'Q', 'v', 'f3', 'f10'):
 		try:
 			controller.close_viewer()

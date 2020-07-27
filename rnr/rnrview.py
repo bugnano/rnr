@@ -1113,16 +1113,16 @@ def main():
 
 	filename = Path(args.FILE)
 
+	if args.debug:
+		set_debug_fh(open(Path.home() / 'rnr.log', 'w', buffering=1))
+
 	try:
 		file_size = os.stat(filename).st_size
+		app = App(filename, file_size, args.monochrome, args.tabsize)
 	except OSError as e:
 		print(e, file=sys.stderr)
 		return 1
 
-	if args.debug:
-		set_debug_fh(open(Path.home() / 'rnr.log', 'w', buffering=1))
-
-	app = App(filename, file_size, args.monochrome, args.tabsize)
 	app.run()
 
 

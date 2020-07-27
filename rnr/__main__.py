@@ -699,11 +699,12 @@ class App(object):
 	def view(self, filename):
 		try:
 			file_size = os.stat(filename).st_size
+			screen = rnrview.Screen(self, filename, file_size, self.tabsize)
 		except OSError:
 			return
 
 		self.old_screen = self.screen
-		self.screen = rnrview.Screen(self, filename, file_size, self.tabsize)
+		self.screen = screen
 		self.loop.widget = self.screen
 		self.loop._unhandled_input = functools.partial(rnrview.keypress, self)
 
@@ -712,6 +713,7 @@ class App(object):
 		self.old_screen = None
 		self.loop.widget = self.screen
 		self.loop._unhandled_input = self.keypress
+		self.reload()
 
 
 def main():

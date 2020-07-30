@@ -100,7 +100,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 	if dbfile:
 		db = DataBase(dbfile)
 
-	file_list = sorted(files, key=lambda x: x['file'])
+	file_list = sorted(files, key=lambda x: x['file'].replace(os.sep, '\0'))
 	error_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'ERROR']
 	skipped_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'SKIPPED']
 	completed_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'DONE']
@@ -226,7 +226,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 						file['warning'] = warning
 				else:
-					if os.path.lexists(cur_target):
+					if os.path.lexists(cur_target) and not skip_dir:
 						when = 'stat_target'
 						target_is_dir = cur_target.is_dir()
 						target_is_symlink = cur_target.is_symlink()

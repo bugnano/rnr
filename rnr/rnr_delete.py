@@ -33,7 +33,7 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nod
 	if dbfile:
 		db = DataBase(dbfile)
 
-	file_list = sorted(files, key=lambda x: x['file'], reverse=True)
+	file_list = sorted(files, key=lambda x: x['file'].replace(os.sep, '\0'), reverse=True)
 	error_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'ERROR']
 	skipped_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'SKIPPED']
 	completed_list = [{'file': x['file'], 'message': x['message']} for x in file_list if x['status'] == 'DONE']

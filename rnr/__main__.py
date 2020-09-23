@@ -34,9 +34,12 @@ import urwid
 import xdg.BaseDirectory
 
 from . import __version__
+from . import rnrview
 
 from .import_config import *
+from .palette import PALETTE
 from .panel import Panel
+from .preview_panel import PreviewPanel
 from .cmdbar import CmdBar
 from .buttonbar import ButtonBar
 from .bookmarks import (Bookmarks, BOOKMARK_KEYS)
@@ -58,81 +61,44 @@ from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 DATA_DIR = Path(xdg.BaseDirectory.save_data_path('rnr'))
 
 
-PALETTE = [
-	('default', 'default', 'default'),
-	('default_error', 'light red', 'default', 'default,bold'),
-
-	('panel', PANEL_FG, PANEL_BG),
-	('reverse', REVERSE_FG, REVERSE_BG, 'standout'),
-	('selected', SELECTED_FG, SELECTED_BG, 'standout'),
-	('marked', MARKED_FG, PANEL_BG, 'default,bold'),
-	('markselect', MARKSELECT_FG, SELECTED_BG, 'standout,bold'),
-
-	('directory', DIRECTORY_FG, PANEL_BG),
-	('dir_symlink', DIR_SYMLINK_FG, PANEL_BG),
-	('executable', EXECUTABLE_FG, PANEL_BG),
-	('symlink', SYMLINK_FG, PANEL_BG),
-	('stalelink', STALELINK_FG, PANEL_BG),
-	('device', DEVICE_FG, PANEL_BG),
-	('special', SPECIAL_FG, PANEL_BG),
-	('archive', ARCHIVE_FG, PANEL_BG),
-
-	('hotkey', HOTKEY_FG, HOTKEY_BG),
-
-	('error', ERROR_FG, ERROR_BG, 'standout'),
-	('error_title', ERROR_TITLE_FG, ERROR_BG, 'standout'),
-	('error_focus', ERROR_FOCUS_FG, ERROR_FOCUS_BG, 'standout'),
-
-	('dialog', DIALOG_FG, DIALOG_BG, 'standout'),
-	('dialog_title', DIALOG_TITLE_FG, DIALOG_BG, 'standout'),
-	('dialog_focus', DIALOG_FOCUS_FG, DIALOG_FOCUS_BG, 'standout'),
-	('progress', DIALOG_BG, DIALOG_FG),
-	('input', INPUT_FG, INPUT_BG),
-
-	('Text', TEXT_FG, TEXT_BG),
-	('Namespace', NAMESPACE_FG, TEXT_BG),
-	('Keyword', KEYWORD_FG, TEXT_BG),
-	('Class', CLASS_FG, TEXT_BG),
-	('Operator', OPERATOR_FG, TEXT_BG),
-	('String', STRING_FG, TEXT_BG),
-	('Literal', LITERAL_FG, TEXT_BG),
-	('Comment', COMMENT_FG, TEXT_BG),
-	('Lineno', LINENO_FG, TEXT_BG, 'default,bold'),
+Labels = [
+	' ', #'Help',
+	' ', #'Menu',
+	'View',
+	'Edit',
+	'Copy',
+	'Move',
+	'Mkdir',
+	'Delete',
+	' ', #'PullDn',
+	'Quit',
 ]
-
-
-from . import rnrview
 
 
 class Screen(urwid.WidgetWrap):
 	def __init__(self, controller):
 		self.left = Panel(controller)
 		self.right = Panel(controller)
+		self.preview_panel = PreviewPanel(controller)
+		#self.center = urwid.Columns([self.left, self.preview_panel, self.right])
 		self.center = urwid.Columns([self.left, self.right])
 		self.command_bar = CmdBar(controller, self)
 		w = urwid.Filler(self.command_bar)
 		pile_widgets = [self.center, (1, w)]
 
+		self.bottom = ButtonBar(Labels)
+		w = urwid.Filler(self.bottom)
 		if SHOW_BUTTONBAR:
-			labels = [
-				' ', #'Help',
-				' ', #'Menu',
-				'View',
-				'Edit',
-				'Copy',
-				'Move',
-				'Mkdir',
-				'Delete',
-				' ', #'PullDn',
-				'Quit',
-			]
-			bottom = ButtonBar(labels)
-			w = urwid.Filler(bottom)
 			pile_widgets.append((1, w))
 
 		self.pile = urwid.Pile(pile_widgets)
 		self.pile.focus_position = 0
-		self.update_focus()
+		self.main_area = 0
+
+		self.list_box = self.preview_panel.listbox
+
+		self.show_preview = False
+		self.in_error = False
 
 		super().__init__(self.pile)
 
@@ -140,20 +106,37 @@ class Screen(urwid.WidgetWrap):
 		for i, e in enumerate(self.center.contents):
 			if i == self.center.focus_position:
 				e[0].set_title_attr('reverse')
+				e[0].focused = True
+				try:
+					e[0].show_preview(e[0].get_focus())
+				except AttributeError:
+					pass
 			else:
 				e[0].set_title_attr('panel')
+				e[0].focused = False
 
 	def close_dialog(self):
-		self.pile.contents[0] = (self.center, self.pile.options())
-		self.center.focus.remove_force_focus()
+		self.pile.contents[self.main_area] = (self.center, self.pile.options())
 
-	def error(self, e):
-		self.center.focus.force_focus()
-		self.pile.contents[0] = (urwid.Overlay(DlgError(self, e), self.center,
+		try:
+			self.center.focus.remove_force_focus()
+		except AttributeError:
+			pass
+
+		self.in_error = False
+
+	def error(self, e, title='Error', error=True):
+		try:
+			self.center.focus.force_focus()
+		except AttributeError:
+			pass
+
+		self.pile.contents[self.main_area] = (urwid.Overlay(DlgError(self, e, title, error), self.center,
 			'center', len(e) + 6,
 			'middle', 'pack',
 		), self.pile.options())
 
+		self.in_error = True
 
 
 class App(object):
@@ -182,10 +165,12 @@ class App(object):
 		self.old_screen = None
 		self.loop = None
 		self.screen = Screen(self)
+		self.screen.update_focus()
 		self.leader = ''
 		self.ev_interrupt = Event()
 		self.suspend = set()
 		self.pending_jobs = []
+		self.focused_quickviewer = False
 
 		self.bookmarks = Bookmarks(CONFIG_DIR / 'bookmarks')
 		if 'h' not in self.bookmarks:
@@ -298,18 +283,25 @@ class App(object):
 					pass
 		else:
 			if key in ('q', 'Q', 'f10'):
-				if self.printwd:
-					try:
-						with open(self.printwd, 'w') as fh:
-							fh.write(str(self.screen.center.focus.cwd))
-					except (FileNotFoundError, PermissionError):
-						pass
-
-				raise urwid.ExitMainLoop()
+				self.quit()
 			elif key == 'tab':
 				if self.screen.pile.focus_position == 0:
-					self.screen.center.focus_position ^= 1
+					self.screen.center.focus_position = (self.screen.center.focus_position + 1) % len(self.screen.center.contents)
 					self.screen.update_focus()
+					if self.screen.center.focus == self.screen.preview_panel:
+						self.focused_quickviewer = True
+						self.set_input_rnrview()
+					else:
+						self.focused_quickviewer = False
+			elif key == 'shift tab':
+				if self.screen.pile.focus_position == 0:
+					self.screen.center.focus_position = (self.screen.center.focus_position - 1) % len(self.screen.center.contents)
+					self.screen.update_focus()
+					if self.screen.center.focus == self.screen.preview_panel:
+						self.focused_quickviewer = True
+						self.set_input_rnrview()
+					else:
+						self.focused_quickviewer = False
 			elif key in ('f', '/'):
 				self.screen.command_bar.filter()
 			elif key == 'enter':
@@ -363,6 +355,23 @@ class App(object):
 				self.loop.start()
 				os.kill(os.getpid(), signal.SIGWINCH)
 				self.reload()
+			elif key == 'ctrl q':
+				if self.screen.left is self.screen.center.focus:
+					if self.screen.show_preview:
+						self.screen.show_preview = False
+						self.screen.center.contents[1] = (self.screen.right, self.screen.center.options())
+					else:
+						self.screen.show_preview = True
+						self.screen.center.contents[1] = (self.screen.preview_panel, self.screen.center.options())
+				elif self.screen.right is self.screen.center.focus:
+					if self.screen.show_preview:
+						self.screen.show_preview = False
+						self.screen.center.contents[0] = (self.screen.left, self.screen.center.options())
+					else:
+						self.screen.show_preview = True
+						self.screen.center.contents[0] = (self.screen.preview_panel, self.screen.center.options())
+
+				self.reload()
 			elif key == 'f7':
 				self.screen.command_bar.mkdir(self.screen.center.focus.cwd)
 			elif key == 'c':
@@ -407,7 +416,7 @@ class App(object):
 						question = f'Delete {len(tagged_files)} files/directories?'
 
 					self.screen.center.focus.force_focus()
-					self.screen.pile.contents[0] = (urwid.Overlay(DlgQuestion(self, title='Delete', question=question,
+					self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(DlgQuestion(self, title='Delete', question=question,
 						on_yes=lambda x: self.on_delete(tagged_files, str(self.screen.center.focus.cwd)), on_no=lambda x: self.screen.close_dialog()), self.screen.center,
 						'center', max(len(question) + 6, 21),
 						'middle', 'pack',
@@ -426,7 +435,7 @@ class App(object):
 						dest_dir = self.screen.left.cwd
 
 					self.screen.center.focus.force_focus()
-					self.screen.pile.contents[0] = (urwid.Overlay(DlgCpMv(self, title='Copy', question=question, dest_dir=str(dest_dir),
+					self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(DlgCpMv(self, title='Copy', question=question, dest_dir=str(dest_dir),
 						on_ok=functools.partial(self.on_copy, tagged_files, str(self.screen.center.focus.cwd)), on_cancel=lambda x: self.screen.close_dialog()), self.screen.center,
 						'center', ('relative', 85),
 						'middle', 'pack',
@@ -445,7 +454,7 @@ class App(object):
 						dest_dir = self.screen.left.cwd
 
 					self.screen.center.focus.force_focus()
-					self.screen.pile.contents[0] = (urwid.Overlay(DlgCpMv(self, title='Move', question=question, dest_dir=str(dest_dir),
+					self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(DlgCpMv(self, title='Move', question=question, dest_dir=str(dest_dir),
 						on_ok=functools.partial(self.on_move, tagged_files, str(self.screen.center.focus.cwd)), on_cancel=lambda x: self.screen.close_dialog()), self.screen.center,
 						'center', ('relative', 85),
 						'middle', 'pack',
@@ -489,7 +498,7 @@ class App(object):
 		ev_abort = Event()
 		ev_skip = Event()
 		dlg = DlgDirscan(self, cwd, q, ev_abort, ev_skip, on_complete)
-		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+		self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 50),
 			'middle', 'pack',
 		), self.screen.pile.options())
@@ -505,7 +514,7 @@ class App(object):
 			self.screen.center.focus.force_focus()
 
 			dlg = DlgReport(self, completed_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id)
-			self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+			self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(dlg, self.screen.center,
 				'center', ('relative', 75),
 				'middle', ('relative', 75),
 			), self.screen.pile.options())
@@ -537,7 +546,7 @@ class App(object):
 		ev_abort = Event()
 		ev_nodb = Event()
 		dlg = DlgDeleteProgress(self, len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, ev_nodb, functools.partial(self.on_finish, operation='Delete', files=files, cwd=cwd, dest=None, scan_error=scan_error, scan_skipped=scan_skipped, job_id=job_id))
-		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+		self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
 		), self.screen.pile.options())
@@ -601,7 +610,7 @@ class App(object):
 		ev_abort = Event()
 		ev_nodb = Event()
 		dlg = DlgCpMvProgress(self, 'Copy', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, ev_nodb, functools.partial(self.on_finish, operation='Copy', files=files, cwd=cwd, dest=dest, scan_error=scan_error, scan_skipped=scan_skipped, job_id=job_id))
-		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+		self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
 		), self.screen.pile.options())
@@ -665,7 +674,7 @@ class App(object):
 		ev_abort = Event()
 		ev_nodb = Event()
 		dlg = DlgCpMvProgress(self, 'Move', len(file_list), sum((x['lstat'].st_size for x in file_list)), q, ev_skip, ev_suspend, ev_abort, ev_nodb, functools.partial(self.on_finish, operation='Move', files=files, cwd=cwd, dest=dest, scan_error=scan_error, scan_skipped=scan_skipped, job_id=job_id))
-		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+		self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', 'pack',
 		), self.screen.pile.options())
@@ -691,7 +700,7 @@ class App(object):
 
 		pending_job = self.pending_jobs.pop(0)
 		dlg = DlgPendingJob(self, pending_job)
-		self.screen.pile.contents[0] = (urwid.Overlay(dlg, self.screen.center,
+		self.screen.pile.contents[self.screen.main_area] = (urwid.Overlay(dlg, self.screen.center,
 			'center', ('relative', 75),
 			'middle', ('relative', 75),
 		), self.screen.pile.options())
@@ -706,14 +715,35 @@ class App(object):
 		self.old_screen = self.screen
 		self.screen = screen
 		self.loop.widget = self.screen
+		self.set_input_rnrview()
+
+	def close_viewer(self, key):
+		if self.old_screen:
+			self.screen = self.old_screen
+			self.old_screen = None
+			self.loop.widget = self.screen
+			self.set_input_rnr()
+			self.reload()
+		elif key in ('q', 'Q', 'f10'):
+			self.quit()
+
+	def set_input_rnrview(self):
+		self.screen.bottom.set_labels(rnrview.Labels)
 		self.loop._unhandled_input = functools.partial(rnrview.keypress, self)
 
-	def close_viewer(self):
-		self.screen = self.old_screen
-		self.old_screen = None
-		self.loop.widget = self.screen
+	def set_input_rnr(self):
+		self.screen.bottom.set_labels(Labels)
 		self.loop._unhandled_input = self.keypress
-		self.reload()
+
+	def quit(self):
+		if self.printwd:
+			try:
+				with open(self.printwd, 'w') as fh:
+					fh.write(str(self.screen.center.focus.cwd))
+			except (FileNotFoundError, PermissionError):
+				pass
+
+		raise urwid.ExitMainLoop()
 
 
 def main():

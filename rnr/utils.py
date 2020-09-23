@@ -27,6 +27,8 @@ from pathlib import Path
 
 import urwid
 
+from .debug_print import (debug_print, debug_pprint)
+
 
 def human_readable_size(size):
 	if size < 1024:

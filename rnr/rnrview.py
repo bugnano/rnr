@@ -22,12 +22,13 @@ from pygments.token import Token
 from . import __version__
 
 from .import_config import *
-from .__main__ import PALETTE
+from .palette import PALETTE
+from .panel import (get_file_list, sort_by_name)
 from .buttonbar import ButtonBar
 from .dlg_goto import DlgGoto
 from .dlg_error import DlgError
 from .dlg_search import DlgSearch
-from .utils import TildeLayout
+from .utils import (TildeLayout, format_date)
 from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 
 
@@ -53,6 +54,20 @@ StyleFromToken = {
 
 
 ReNewLine = re.compile(r'''(?:\r\n|[\r\n])$''')
+
+
+Labels = [
+	' ', #'Help',
+	' ', #'UnWrap',
+	'Quit',
+	'Hex', #'Ascii',
+	'Goto',
+	' ',
+	'Search',
+	' ', #'Raw',
+	' ', #'Format',
+	'Quit',
+]
 
 
 def masked_string(b, attr_normal, attr_highlight):
@@ -443,89 +458,10 @@ class HexFileWalker(BinaryFileWalker):
 			self._modified()
 
 
-class TextFileWalker(urwid.ListWalker):
-	def __init__(self, fh, file_size, data, code, filename, tabsize):
-		self.fh = fh
-		self.file_size = file_size
-		self.data = data
-		self.code = code.splitlines(keepends=True)
-		self.filename = filename
-		self.tabsize = tabsize
-		self.lines = []
-		self.focus = 0
-		self.search_expression = None
-		self.search_backwards = False
-
-		try:
-			name = self.filename.name
-			if name == name.upper():
-				filename = self.filename.parent / self.filename.name.lower()
-			else:
-				filename = self.filename
-
-			lexer = pygments.lexers.get_lexer_for_filename(filename, stripnl=False, tabsize=self.tabsize)
-		except pygments.util.ClassNotFound:
-			try:
-				lexer = pygments.lexers.guess_lexer(code, stripnl=False, tabsize=self.tabsize)
-			except pygments.util.ClassNotFound:
-				lexer = pygments.lexers.special.TextLexer(stripnl=False, tabsize=self.tabsize)
-
-		del self.lines[:]
-		line = []
-		result = pygments.lex(code, lexer)
-		for tokentype, value in result:
-			for k, v in StyleFromToken.items():
-				if tokentype in k:
-					style = v
-					break
-			else:
-				style = 'Text'
-
-			for l in value.splitlines(keepends=True):
-				if ReNewLine.search(l):
-					line.append((style, ReNewLine.sub('', l)))
-					self.lines.append(line)
-					line = []
-				else:
-					line.append((style, l))
-
-		self.len_lines = len(self.lines)
-		self.digits = len(str(self.len_lines))
-
-	def get_focus(self):
-		pos = self.focus
-		if (pos < 0) or (pos >= self.len_lines):
-			return (None, None)
-
-
-		line = self.highlight_line(pos, 'markselect')
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
-
-		return (w, pos)
-
+class BaseTextFileWalker(urwid.ListWalker):
 	def set_focus(self, position):
 		self.focus = position
 		self._modified()
-
-	def get_next(self, position):
-		pos = position + 1
-		if pos >= self.len_lines:
-			return (None, None)
-
-		line = self.highlight_line(pos, 'selected')
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
-
-		return (w, pos)
-
-	def get_prev(self, position):
-		pos = position - 1
-		if pos < 0:
-			return (None, None)
-
-		line = self.highlight_line(pos, 'selected')
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
-
-		return (w, pos)
 
 	def positions(self, reverse=False):
 		if reverse:
@@ -684,13 +620,156 @@ class TextFileWalker(urwid.ListWalker):
 
 		return new_line
 
+class TextFileWalker(BaseTextFileWalker):
+	def __init__(self, fh, file_size, code, filename, tabsize):
+		self.fh = fh
+		self.file_size = file_size
+		self.code = code.splitlines(keepends=True)
+		self.filename = filename
+		self.tabsize = tabsize
+		self.lines = []
+		self.focus = 0
+		self.search_expression = None
+		self.search_backwards = False
+
+		try:
+			name = self.filename.name
+			if name == name.upper():
+				filename = self.filename.parent / self.filename.name.lower()
+			else:
+				filename = self.filename
+
+			lexer = pygments.lexers.get_lexer_for_filename(filename, stripnl=False, tabsize=self.tabsize)
+		except pygments.util.ClassNotFound:
+			try:
+				lexer = pygments.lexers.guess_lexer(code, stripnl=False, tabsize=self.tabsize)
+			except pygments.util.ClassNotFound:
+				lexer = pygments.lexers.special.TextLexer(stripnl=False, tabsize=self.tabsize)
+
+		del self.lines[:]
+		line = []
+		result = pygments.lex(code, lexer)
+		for tokentype, value in result:
+			for k, v in StyleFromToken.items():
+				if tokentype in k:
+					style = v
+					break
+			else:
+				style = 'Text'
+
+			for l in value.splitlines(keepends=True):
+				if ReNewLine.search(l):
+					line.append((style, ReNewLine.sub('', l)))
+					self.lines.append(line)
+					line = []
+				else:
+					line.append((style, l))
+
+		self.len_lines = len(self.lines)
+		self.digits = len(str(self.len_lines))
+
+	def get_focus(self):
+		pos = self.focus
+		if (pos < 0) or (pos >= self.len_lines):
+			return (None, None)
+
+
+		line = self.highlight_line(pos, 'markselect')
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+	def get_next(self, position):
+		pos = position + 1
+		if pos >= self.len_lines:
+			return (None, None)
+
+		line = self.highlight_line(pos, 'selected')
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+	def get_prev(self, position):
+		pos = position - 1
+		if pos < 0:
+			return (None, None)
+
+		line = self.highlight_line(pos, 'selected')
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
+
+		return (w, pos)
+
+class TextDirectoryWalker(BaseTextFileWalker):
+	def __init__(self, files, filename):
+		files.sort(key=functools.cmp_to_key(sort_by_name))
+
+		self.fh = None
+		self.file_size = 0
+		self.code = [f'{x["label"]}\n' for x in files]
+		self.files = files
+		self.filename = filename
+		self.lines = [[(x['palette'], x['label'])] for x in files]
+		self.focus = 0
+		self.search_expression = None
+		self.search_backwards = False
+
+		self.len_lines = len(self.lines)
+		self.digits = len(str(self.len_lines))
+
+	def get_focus(self):
+		pos = self.focus
+		if (pos < 0) or (pos >= self.len_lines):
+			return (None, None)
+
+
+		file = self.files[pos]
+		line = self.highlight_line(pos, 'markselect')
+		w = urwid.Columns([urwid.Text(line, wrap='clip'), ('pack', urwid.Text((file['palette'], file['size']))), ('pack', urwid.Text((file['palette'], format_date(file['lstat'].st_mtime))))], dividechars=1)
+
+		return (w, pos)
+
+	def get_next(self, position):
+		pos = position + 1
+		if pos >= self.len_lines:
+			return (None, None)
+
+		file = self.files[pos]
+		line = self.highlight_line(pos, 'selected')
+		w = urwid.Columns([urwid.Text(line, wrap='clip'), ('pack', urwid.Text((file['palette'], file['size']))), ('pack', urwid.Text((file['palette'], format_date(file['lstat'].st_mtime))))], dividechars=1)
+
+		return (w, pos)
+
+	def get_prev(self, position):
+		pos = position - 1
+		if pos < 0:
+			return (None, None)
+
+		file = self.files[pos]
+		line = self.highlight_line(pos, 'selected')
+		w = urwid.Columns([urwid.Text(line, wrap='clip'), ('pack', urwid.Text((file['palette'], file['size']))), ('pack', urwid.Text((file['palette'], format_date(file['lstat'].st_mtime))))], dividechars=1)
+
+		return (w, pos)
+
 
 class FileViewListBox(urwid.ListBox):
-	def __init__(self, controller, filename, file_size, tabsize):
+	def __init__(self, controller, tabsize):
 		self.controller = controller
+		self.tabsize = tabsize
+		self.clear_walker = urwid.SimpleFocusListWalker([])
+		self.walker = self.clear_walker
+		self.hex_walker = None
+
+		self.old_size = None
+
+		super().__init__(self.walker)
+
+	def clear(self):
+		self.walker = self.clear_walker
+		self.body = self.walker
+
+	def read_file(self, filename, file_size):
 		self.filename = filename
 		self.file_size = file_size
-		self.tabsize = tabsize
 
 		fh = open(filename, 'rb')
 
@@ -726,7 +805,7 @@ class FileViewListBox(urwid.ListBox):
 
 		self.old_size = None
 
-		super().__init__(self.walker)
+		self.body = self.walker
 
 	def read_text_file(self, fh, encoding):
 		fh.seek(0)
@@ -758,11 +837,36 @@ class FileViewListBox(urwid.ListBox):
 
 		del self.line_offset[-1]
 
-		w = TextFileWalker(fh, self.file_size, data, code, self.filename, self.tabsize)
+		w = TextFileWalker(fh, self.file_size, code, self.filename, self.tabsize)
 		self.lines = w.lines
 		self.len_lines = w.len_lines
 
 		return w
+
+	def read_directory(self, filename):
+		self.text_file = True
+
+		files = get_file_list(filename)
+		w = TextDirectoryWalker(files, filename)
+		self.lines = w.lines
+		self.len_lines = w.len_lines
+		self.file_size = self.len_lines
+
+		len_line = 0
+		self.line_offset = [len_line]
+		for line in w.code:
+			len_line += len(line)
+			self.line_offset.append(len_line)
+
+		del self.line_offset[-1]
+
+		data = (''.join(w.code)).encode('utf-8')
+		self.walker = w
+		self.hex_walker = HexFileWalker(None, len(data), data)
+
+		self.old_size = None
+
+		self.body = self.walker
 
 	def use_hex_offset(self):
 		if self.text_file:
@@ -785,191 +889,43 @@ class FileViewListBox(urwid.ListBox):
 
 		return mid
 
-	def search_next(self):
-		if self.body.search_expression is None:
-			return
-
-		self.controller.screen.error('Searching...', title='Search', error=False)
-		self.controller.loop.draw_screen()
-
-		pos = self.body.search_next()
-
-		self.controller.screen.close_dialog()
-		self.controller.loop.draw_screen()
-
-		if pos is not None:
-			self.set_focus(pos)
-			self.set_focus_valign('top')
-			self._invalidate()
-		else:
-			self.controller.screen.error('Search string not found', title='Search', error=False)
-
-	def search_prev(self):
-		if self.body.search_expression is None:
-			return
-
-		self.controller.screen.error('Searching...', title='Search', error=False)
-		self.controller.loop.draw_screen()
-
-		pos = self.body.search_prev()
-
-		self.controller.screen.close_dialog()
-		self.controller.loop.draw_screen()
-
-		if pos is not None:
-			self.set_focus(pos)
-			self.set_focus_valign('top')
-			self._invalidate()
-		else:
-			self.controller.screen.error('Search string not found', title='Search', error=False)
-
-	def render(self, size, *args, **kwargs):
-		if size != self.old_size:
-			self.old_size = size
-			self.body.change_size(size)
-
-		return super().render(size, *args, **kwargs)
-
-	def keypress(self, size, key):
-		if key in ('h', 'f4'):
-			prev_focus = self.focus_position
-
-			if self.body == self.walker:
-				self.body = self.hex_walker
-				if self.text_file:
-					self.set_focus(self.line_offset[prev_focus])
-				else:
-					self.set_focus(prev_focus)
-			else:
-				self.body = self.walker
-				if self.text_file:
-					self.set_focus(self.line_from_offset(prev_focus))
-				else:
-					self.set_focus(prev_focus)
-
-			if 'bottom'in self.ends_visible(size):
-				self.set_focus(self.body.get_focus_offset(self.file_size))
-				self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
-
-			self.set_focus_valign('top')
-
-			self.body.change_size(size)
-
-			self._invalidate()
-		elif key in ('j', 'down'):
-			self.set_focus(self.body.get_focus_offset(1))
-			if 'bottom'in self.ends_visible(size):
-				self.set_focus(self.body.get_focus_offset(self.file_size))
-				self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
-
-			self.set_focus_valign('top')
-
-			self._invalidate()
-		elif key in ('k', 'up'):
-			self.set_focus(self.body.get_focus_offset(-1))
-			self.set_focus_valign('top')
-
-			self._invalidate()
-		elif key in ('g', 'home'):
-			self.set_focus(0)
-			self.set_focus_valign('top')
-
-			self._invalidate()
-		elif key in ('G', 'end'):
-			self.set_focus(self.body.get_focus_offset(self.file_size))
-			self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
-			self.set_focus_valign('top')
-
-			self._invalidate()
-		elif key in ('ctrl b', 'page up'):
-			self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
-			self.set_focus_valign('top')
-
-			self._invalidate()
-		elif key in ('ctrl f', 'page down'):
-			self.set_focus(self.body.get_focus_offset(max(size[1] - 1, 1)))
-			if 'bottom'in self.ends_visible(size):
-				self.set_focus(self.body.get_focus_offset(self.file_size))
-				self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
-
-			self.set_focus_valign('top')
-
-			self._invalidate()
-		else:
-			return super().keypress(size, key)
-
-
-class Screen(urwid.WidgetWrap):
-	def __init__(self, controller, filename, file_size, tabsize):
-		self.controller = controller
-		self.filename = filename
-		self.file_size = file_size
-		self.tabsize = tabsize
-
-		self.in_error = False
-
-		top = TopBar(filename)
-
-		self.list_box = FileViewListBox(controller, filename, file_size, tabsize)
-		self.center = urwid.AttrMap(self.list_box, 'Text')
-
-		pile_widgets = [(1, urwid.Filler(top)), self.center]
-
-		if SHOW_BUTTONBAR:
-			labels = [
-				' ', #'Help',
-				' ', #'UnWrap',
-				'Quit',
-				'Hex', #'Ascii',
-				'Goto',
-				' ',
-				'Search',
-				' ', #'Raw',
-				' ', #'Format',
-				'Quit',
-			]
-			bottom = ButtonBar(labels)
-			w = urwid.Filler(bottom)
-			pile_widgets.append((1, w))
-
-		self.pile = urwid.Pile(pile_widgets)
-
-		super().__init__(self.pile)
-
 	def on_goto(self, pos):
-		self.close_dialog()
+		self.controller.screen.close_dialog()
 
 		try:
-			if self.list_box.use_hex_offset():
+			if self.use_hex_offset():
 				pos = int(pos, 16)
 			else:
 				pos = int(pos, 10) - 1
 		except ValueError:
-			self.error(f'Invalid number: {pos}')
+			self.controller.screen.error(f'Invalid number: {pos}')
 			return
 
-		if self.list_box.use_hex_offset():
-			if pos >= self.list_box.file_size:
-				pos = self.list_box.file_size - 1
+		if self.use_hex_offset():
+			if pos >= self.file_size:
+				pos = self.file_size - 1
 		else:
-			if pos >= self.list_box.len_lines:
-				pos = self.list_box.len_lines - 1
+			if pos >= self.len_lines:
+				pos = self.len_lines - 1
 
 		if pos < 0:
 			pos = 0
 
-		self.list_box.set_focus(pos)
-		self.list_box.set_focus_valign('top')
+		try:
+			self.set_focus(pos)
+			self.set_focus_valign('top')
+		except IndexError:
+			pass
 
 	def on_search(self, text, mode, flags):
-		self.close_dialog()
+		self.controller.screen.close_dialog()
 
 		if not text:
-			self.list_box.body.stop_search()
-			self.list_box._invalidate()
+			self.body.stop_search()
+			self._invalidate()
 			return
 
-		if self.list_box.use_hex_offset():
+		if self.use_hex_offset():
 			if flags.hex:
 				parts = []
 				use_hex_value = True
@@ -986,7 +942,7 @@ class Screen(urwid.WidgetWrap):
 							try:
 								parts.append(bytes.fromhex(hex_value))
 							except ValueError:
-								self.error(f'Hex pattern error: {hex_part}', title='Search', error=False)
+								self.controller.screen.error(f'Hex pattern error: {hex_part}', title='Search', error=False)
 								return
 					else:
 						parts.append(part.encode(sys.getdefaultencoding()))
@@ -1014,28 +970,227 @@ class Screen(urwid.WidgetWrap):
 
 			expression = re.compile(expression, re_flags)
 
-		self.error('Searching...', title='Search', error=False)
+		self.controller.screen.error('Searching...', title='Search', error=False)
 		self.controller.loop.draw_screen()
 
-		pos = self.list_box.body.start_search(expression, flags.backwards)
+		pos = self.body.start_search(expression, flags.backwards)
 
-		self.close_dialog()
+		self.controller.screen.close_dialog()
 		self.controller.loop.draw_screen()
 
 		if pos is not None:
-			self.list_box.set_focus(pos)
-			self.list_box.set_focus_valign('top')
-			self.list_box._invalidate()
+			try:
+				self.set_focus(pos)
+				self.set_focus_valign('top')
+				self._invalidate()
+			except IndexError:
+				pass
 		else:
-			self.error('Search string not found', title='Search', error=False)
+			self.controller.screen.error('Search string not found', title='Search', error=False)
+
+	def search_next(self):
+		if self.body.search_expression is None:
+			return
+
+		self.controller.screen.error('Searching...', title='Search', error=False)
+		self.controller.loop.draw_screen()
+
+		pos = self.body.search_next()
+
+		self.controller.screen.close_dialog()
+		self.controller.loop.draw_screen()
+
+		if pos is not None:
+			try:
+				self.set_focus(pos)
+				self.set_focus_valign('top')
+				self._invalidate()
+			except IndexError:
+				pass
+		else:
+			self.controller.screen.error('Search string not found', title='Search', error=False)
+
+	def search_prev(self):
+		if self.body.search_expression is None:
+			return
+
+		self.controller.screen.error('Searching...', title='Search', error=False)
+		self.controller.loop.draw_screen()
+
+		pos = self.body.search_prev()
+
+		self.controller.screen.close_dialog()
+		self.controller.loop.draw_screen()
+
+		if pos is not None:
+			try:
+				self.set_focus(pos)
+				self.set_focus_valign('top')
+				self._invalidate()
+			except IndexError:
+				pass
+		else:
+			self.controller.screen.error('Search string not found', title='Search', error=False)
+
+	def render(self, size, *args, **kwargs):
+		if size != self.old_size:
+			self.old_size = size
+			try:
+				self.body.change_size(size)
+			except AttributeError:
+				pass
+
+		return super().render(size, *args, **kwargs)
+
+	def keypress(self, size, key):
+		if key in ('h', 'f4'):
+			try:
+				prev_focus = self.focus_position
+			except IndexError:
+				prev_focus = 0
+
+			if self.body == self.walker:
+				self.body = self.hex_walker
+				try:
+					if self.text_file:
+						self.set_focus(self.line_offset[prev_focus])
+					else:
+						self.set_focus(prev_focus)
+				except IndexError:
+					pass
+			else:
+				self.body = self.walker
+				try:
+					if self.text_file:
+						self.set_focus(self.line_from_offset(prev_focus))
+					else:
+						self.set_focus(prev_focus)
+				except IndexError:
+					pass
+
+			if 'bottom' in self.ends_visible(size):
+				try:
+					self.set_focus(self.body.get_focus_offset(self.file_size))
+					self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+				except IndexError:
+					pass
+
+			try:
+				self.set_focus_valign('top')
+			except IndexError:
+				pass
+
+			self.body.change_size(size)
+
+			self._invalidate()
+		elif key in ('j', 'down'):
+			try:
+				self.set_focus(self.body.get_focus_offset(1))
+				if 'bottom' in self.ends_visible(size):
+					self.set_focus(self.body.get_focus_offset(self.file_size))
+					self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+
+				self.set_focus_valign('top')
+
+				self._invalidate()
+			except IndexError:
+				pass
+		elif key in ('k', 'up'):
+			try:
+				if 'bottom' in self.ends_visible(size):
+					self.set_focus(self.body.get_focus_offset(self.file_size))
+					self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+
+				self.set_focus(self.body.get_focus_offset(-1))
+				self.set_focus_valign('top')
+
+				self._invalidate()
+			except IndexError:
+				pass
+		elif key in ('g', 'home'):
+			try:
+				self.set_focus(0)
+				self.set_focus_valign('top')
+
+				self._invalidate()
+			except IndexError:
+				pass
+		elif key in ('G', 'end'):
+			try:
+				self.set_focus(self.body.get_focus_offset(self.file_size))
+				self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+				self.set_focus_valign('top')
+
+				self._invalidate()
+			except IndexError:
+				pass
+		elif key in ('ctrl b', 'page up'):
+			try:
+				if 'bottom' in self.ends_visible(size):
+					self.set_focus(self.body.get_focus_offset(self.file_size))
+					self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+
+				self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+				self.set_focus_valign('top')
+
+				self._invalidate()
+			except IndexError:
+				pass
+		elif key in ('ctrl f', 'page down'):
+			try:
+				self.set_focus(self.body.get_focus_offset(max(size[1] - 1, 1)))
+				if 'bottom' in self.ends_visible(size):
+					self.set_focus(self.body.get_focus_offset(self.file_size))
+					self.set_focus(self.body.get_focus_offset(min(-(size[1] - 1), -1)))
+
+				self.set_focus_valign('top')
+
+				self._invalidate()
+			except IndexError:
+				pass
+		else:
+			return super().keypress(size, key)
+
+
+class Screen(urwid.WidgetWrap):
+	def __init__(self, controller, filename, file_size, tabsize):
+		self.controller = controller
+		self.filename = filename
+		self.file_size = file_size
+		self.tabsize = tabsize
+
+		self.in_error = False
+
+		top = TopBar(filename)
+
+		self.list_box = FileViewListBox(controller, tabsize)
+
+		try:
+			self.list_box.read_file(filename, file_size)
+			self.center = urwid.AttrMap(self.list_box, 'Text')
+		except IsADirectoryError:
+			self.list_box.read_directory(filename)
+			self.center = urwid.AttrMap(self.list_box, 'panel')
+
+		pile_widgets = [(1, urwid.Filler(top)), self.center]
+
+		self.bottom = ButtonBar(Labels)
+		w = urwid.Filler(self.bottom)
+		if SHOW_BUTTONBAR:
+			pile_widgets.append((1, w))
+
+		self.pile = urwid.Pile(pile_widgets)
+		self.main_area = 1
+
+		super().__init__(self.pile)
 
 	def close_dialog(self):
-		self.pile.contents[1] = (self.center, self.pile.options())
+		self.pile.contents[self.main_area] = (self.center, self.pile.options())
 
 		self.in_error = False
 
 	def error(self, e, title='Error', error=True):
-		self.pile.contents[1] = (urwid.Overlay(DlgError(self, e, title, error), self.center,
+		self.pile.contents[self.main_area] = (urwid.Overlay(DlgError(self, e, title, error), self.center,
 			'center', len(e) + 6,
 			'middle', 'pack',
 		), self.pile.options())
@@ -1048,6 +1203,8 @@ class App(object):
 		self.filename = filename
 		self.monochrome = monochrome
 		self.tabsize = tabsize
+
+		self.focused_quickviewer = False
 
 		self.screen = Screen(self, filename, file_size, tabsize)
 
@@ -1070,7 +1227,7 @@ def keypress(controller, key):
 		controller.screen.list_box._invalidate()
 	elif key in ('q', 'Q', 'v', 'f3', 'f10'):
 		try:
-			controller.close_viewer()
+			controller.close_viewer(key)
 		except AttributeError:
 			raise urwid.ExitMainLoop()
 	elif key in (':', 'f5'):
@@ -1082,7 +1239,7 @@ def keypress(controller, key):
 		else:
 			label = 'Line number: '
 
-		controller.screen.pile.contents[1] = (urwid.Overlay(DlgGoto(controller.screen, controller.screen.on_goto, lambda x: controller.screen.close_dialog(), label=label), controller.screen.center,
+		controller.screen.pile.contents[controller.screen.main_area] = (urwid.Overlay(DlgGoto(controller.screen, controller.screen.list_box.on_goto, lambda x: controller.screen.close_dialog(), label=label), controller.screen.center,
 			'center', 30,
 			'middle', 'pack',
 		), controller.screen.pile.options())
@@ -1092,7 +1249,7 @@ def keypress(controller, key):
 
 		backwards = (key == '?')
 
-		controller.screen.pile.contents[1] = (urwid.Overlay(DlgSearch(controller.screen, controller.screen.on_search, lambda x: controller.screen.close_dialog(), text_file=not controller.screen.list_box.use_hex_offset(), backwards=backwards), controller.screen.center,
+		controller.screen.pile.contents[controller.screen.main_area] = (urwid.Overlay(DlgSearch(controller.screen, controller.screen.list_box.on_search, lambda x: controller.screen.close_dialog(), text_file=not controller.screen.list_box.use_hex_offset(), backwards=backwards), controller.screen.center,
 			'center', 58,
 			'middle', 'pack',
 		), controller.screen.pile.options())
@@ -1100,6 +1257,10 @@ def keypress(controller, key):
 		controller.screen.list_box.search_next()
 	elif key == 'N':
 		controller.screen.list_box.search_prev()
+	elif key in ('tab', 'shift tab'):
+		if controller.focused_quickviewer:
+			controller.set_input_rnr()
+			controller.keypress(key)
 
 
 def main():

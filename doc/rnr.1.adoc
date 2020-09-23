@@ -2,9 +2,9 @@
 :doctype: manpage
 :author: Franco Bugnano
 :man source: rnr
-:man version: 0.4.0
+:man version: 0.4.1
 :man manual: rnr manual
-:revdate: 2020-07-27
+:revdate: 2020-07-30
 
 
 == NAME
@@ -47,6 +47,7 @@ https://ranger.github.io/[Ranger]
 *CTRL-R*:: Reload panels
 *CTRL-U*:: Swap panels
 *CTRL-O*:: Show console output
+*CTRL-Q*:: Toggle quick view on other panel
 *TAB*:: Change active panel
 *ALT-I*:: Set the other panel to the current directory
 *ALT-O*:: Set the other panel to the highlited directory

@@ -24,17 +24,22 @@ import urwid
 
 class ButtonBar(urwid.WidgetWrap):
 	def __init__(self, labels):
+		self.columns = urwid.Columns([])
+		self.set_labels(labels)
+
+		super().__init__(self.columns)
+
+	def set_labels(self, labels):
 		widgets = []
 		for i, label in enumerate(labels):
 			w = urwid.Text(f'{i + 1}', align='right')
 			w = urwid.AttrMap(w, 'hotkey')
-			widgets.append((2, w))
+			widgets.append((w, self.columns.options('given', 2)))
 
 			w = urwid.Text(label)
 			w = urwid.AttrMap(w, 'selected')
-			widgets.append(w)
+			widgets.append((w, self.columns.options()))
 
-		w = urwid.Columns(widgets)
-
-		super().__init__(w)
+		del self.columns.contents[:]
+		self.columns.contents.extend(widgets)
 

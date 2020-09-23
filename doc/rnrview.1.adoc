@@ -2,9 +2,9 @@
 :doctype: manpage
 :author: Franco Bugnano
 :man source: rnrview
-:man version: 0.4.0
+:man version: 0.4.1
 :man manual: rnr manual
-:revdate: 2020-07-27
+:revdate: 2020-07-30
 
 
 == NAME

@@ -100,6 +100,116 @@ def sort_by_size(a, b, reverse=False):
 		return sort_by_name(a, b, reverse)
 
 
+def get_file_list(cwd):
+	cwd = Path(cwd)
+
+	uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
+	gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
+
+	files = []
+	for file in cwd.iterdir():
+		obj = {
+			'file': file,
+			'key': natsort_key(file.name),
+			'extension': natsort_key(tar_suffix(file)),
+		}
+
+		try:
+			lstat = file.lstat()
+		except FileNotFoundError:
+			continue
+
+		obj['lstat'] = lstat
+
+		if stat.S_ISLNK(lstat.st_mode):
+			try:
+				st = file.stat()
+				if stat.S_ISDIR(st.st_mode):
+					obj['label'] = f'~{file.name}'
+					obj['palette'] = 'dir_symlink'
+				else:
+					obj['label'] = f'@{file.name}'
+					obj['palette'] = 'symlink'
+			except (FileNotFoundError, PermissionError):
+				st = lstat
+				obj['label'] = f'!{file.name}'
+				obj['palette'] = 'stalelink'
+		else:
+			st = lstat
+			if stat.S_ISDIR(st.st_mode):
+				obj['label'] = f'/{file.name}'
+				obj['palette'] = 'directory'
+			elif stat.S_ISCHR(lstat.st_mode):
+				obj['label'] = f'-{file.name}'
+				obj['palette'] = 'device'
+			elif stat.S_ISBLK(lstat.st_mode):
+				obj['label'] = f'+{file.name}'
+				obj['palette'] = 'device'
+			elif stat.S_ISFIFO(lstat.st_mode):
+				obj['label'] = f'|{file.name}'
+				obj['palette'] = 'special'
+			elif stat.S_ISSOCK(lstat.st_mode):
+				obj['label'] = f'={file.name}'
+				obj['palette'] = 'special'
+			elif lstat.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+				obj['label'] = f'*{file.name}'
+				obj['palette'] = 'executable'
+			else:
+				obj['label'] = f' {file.name}'
+				obj['palette'] = 'panel'
+
+		obj['stat'] = st
+
+		if stat.S_ISDIR(st.st_mode):
+			try:
+				length =len(list(file.iterdir()))
+				obj['length'] = (length,)
+				obj['size'] = str(length)
+			except (FileNotFoundError, PermissionError):
+				obj['length'] = (-1,)
+				obj['size'] = '?'
+		elif stat.S_ISCHR(lstat.st_mode) or stat.S_ISBLK(lstat.st_mode):
+				major = os.major(lstat.st_rdev)
+				minor = os.minor(lstat.st_rdev)
+				obj['length'] = (major, minor)
+				obj['size'] = f'{major},{minor}'
+		else:
+			length = lstat.st_size
+			obj['length'] = (length,)
+			obj['size'] = human_readable_size(length)
+
+		try:
+			uid = uid_cache[lstat.st_uid]
+		except KeyError:
+			uid = str(lstat.st_uid)
+
+		try:
+			gid = gid_cache[lstat.st_gid]
+		except KeyError:
+			gid = str(lstat.st_gid)
+
+		obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid} {gid}'
+
+		if stat.S_ISLNK(lstat.st_mode):
+			try:
+				link_target = os.readlink(file)
+
+				obj['details'] = f'{obj["details"]} -> {link_target}'
+				if Path(link_target).is_absolute():
+					obj['link_target'] = Path(os.path.normpath(link_target))
+				else:
+					obj['link_target'] = Path(os.path.normpath(file.parent / link_target))
+			except (FileNotFoundError, PermissionError):
+				obj['details'] = f'{obj["details"]} -> ?'
+				obj['link_target'] = file
+		else:
+			obj['details'] = f'{obj["details"]} {file.name}'
+
+		files.append(obj)
+
+	return files
+
+
 class Cache(collections.defaultdict):
 	def __missing__(self, key):
 		if self.default_factory is None:
@@ -138,8 +248,10 @@ class VimListBox(urwid.ListBox):
 
 			try:
 				self.model.show_details(self.model.walker.get_focus()[0].model)
+				self.model.show_preview(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				self.model.show_details(None)
+				self.model.show_preview(None)
 
 			return retval
 		elif key in ('k', 'up'):
@@ -153,8 +265,10 @@ class VimListBox(urwid.ListBox):
 
 			try:
 				self.model.show_details(self.model.walker.get_focus()[0].model)
+				self.model.show_preview(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				self.model.show_details(None)
+				self.model.show_preview(None)
 
 			return retval
 		elif key in ('l', 'right', 'enter'):
@@ -167,8 +281,10 @@ class VimListBox(urwid.ListBox):
 
 			try:
 				self.model.show_details(self.model.walker.get_focus()[0].model)
+				self.model.show_preview(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				self.model.show_details(None)
+				self.model.show_preview(None)
 
 			return retval
 		elif key in ('G', 'end'):
@@ -176,8 +292,10 @@ class VimListBox(urwid.ListBox):
 
 			try:
 				self.model.show_details(self.model.walker.get_focus()[0].model)
+				self.model.show_preview(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				self.model.show_details(None)
+				self.model.show_preview(None)
 
 			return retval
 		elif key in ('ctrl b', 'page up'):
@@ -185,8 +303,10 @@ class VimListBox(urwid.ListBox):
 
 			try:
 				self.model.show_details(self.model.walker.get_focus()[0].model)
+				self.model.show_preview(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				self.model.show_details(None)
+				self.model.show_preview(None)
 
 			return retval
 		elif key in ('ctrl f', 'page down'):
@@ -194,8 +314,10 @@ class VimListBox(urwid.ListBox):
 
 			try:
 				self.model.show_details(self.model.walker.get_focus()[0].model)
+				self.model.show_preview(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				self.model.show_details(None)
+				self.model.show_preview(None)
 
 			return retval
 		elif key in ('v', 'f3'):
@@ -263,6 +385,8 @@ class Panel(urwid.WidgetWrap):
 		self.chdir(cwd)
 		self.walker.set_focus(0)
 
+		self.focused = False
+
 		super().__init__(self.pile)
 
 	def chdir(self, cwd, focus_path=None):
@@ -320,111 +444,9 @@ class Panel(urwid.WidgetWrap):
 
 		self.pile.contents[1] = listbox
 
-		uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
-		gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
-
-		files = []
 		try:
+			files = get_file_list(cwd)
 
-			for file in cwd.iterdir():
-				obj = {
-					'file': file,
-					'key': natsort_key(file.name),
-					'extension': natsort_key(tar_suffix(file)),
-				}
-
-				try:
-					lstat = file.lstat()
-				except FileNotFoundError:
-					continue
-
-				obj['lstat'] = lstat
-
-				if stat.S_ISLNK(lstat.st_mode):
-					try:
-						st = file.stat()
-						if stat.S_ISDIR(st.st_mode):
-							obj['label'] = f'~{file.name}'
-							obj['palette'] = 'dir_symlink'
-						else:
-							obj['label'] = f'@{file.name}'
-							obj['palette'] = 'symlink'
-					except (FileNotFoundError, PermissionError):
-						st = lstat
-						obj['label'] = f'!{file.name}'
-						obj['palette'] = 'stalelink'
-				else:
-					st = lstat
-					if stat.S_ISDIR(st.st_mode):
-						obj['label'] = f'/{file.name}'
-						obj['palette'] = 'directory'
-					elif stat.S_ISCHR(lstat.st_mode):
-						obj['label'] = f'-{file.name}'
-						obj['palette'] = 'device'
-					elif stat.S_ISBLK(lstat.st_mode):
-						obj['label'] = f'+{file.name}'
-						obj['palette'] = 'device'
-					elif stat.S_ISFIFO(lstat.st_mode):
-						obj['label'] = f'|{file.name}'
-						obj['palette'] = 'special'
-					elif stat.S_ISSOCK(lstat.st_mode):
-						obj['label'] = f'={file.name}'
-						obj['palette'] = 'special'
-					elif lstat.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
-						obj['label'] = f'*{file.name}'
-						obj['palette'] = 'executable'
-					else:
-						obj['label'] = f' {file.name}'
-						obj['palette'] = 'panel'
-
-				obj['stat'] = st
-
-				if stat.S_ISDIR(st.st_mode):
-					try:
-						length =len(list(file.iterdir()))
-						obj['length'] = (length,)
-						obj['size'] = str(length)
-					except (FileNotFoundError, PermissionError):
-						obj['length'] = (-1,)
-						obj['size'] = '?'
-				elif stat.S_ISCHR(lstat.st_mode) or stat.S_ISBLK(lstat.st_mode):
-						major = os.major(lstat.st_rdev)
-						minor = os.minor(lstat.st_rdev)
-						obj['length'] = (major, minor)
-						obj['size'] = f'{major},{minor}'
-				else:
-					length = lstat.st_size
-					obj['length'] = (length,)
-					obj['size'] = human_readable_size(length)
-
-				try:
-					uid = uid_cache[lstat.st_uid]
-				except KeyError:
-					uid = str(lstat.st_uid)
-
-				try:
-					gid = gid_cache[lstat.st_gid]
-				except KeyError:
-					gid = str(lstat.st_gid)
-
-				obj['details'] = f'{stat.filemode(lstat.st_mode)} {lstat.st_nlink} {uid} {gid}'
-
-				if stat.S_ISLNK(lstat.st_mode):
-					try:
-						link_target = os.readlink(file)
-
-						obj['details'] = f'{obj["details"]} -> {link_target}'
-						if Path(link_target).is_absolute():
-							obj['link_target'] = Path(os.path.normpath(link_target))
-						else:
-							obj['link_target'] = Path(os.path.normpath(file.parent / link_target))
-					except (FileNotFoundError, PermissionError):
-						obj['details'] = f'{obj["details"]} -> ?'
-						obj['link_target'] = file
-				else:
-					obj['details'] = f'{obj["details"]} {file.name}'
-
-				files.append(obj)
 		except (FileNotFoundError, PermissionError):
 			return False
 
@@ -468,6 +490,13 @@ class Panel(urwid.WidgetWrap):
 			self.show_details(self.filtered_files[focus])
 		except IndexError:
 			self.show_details(None)
+
+		try:
+			self.show_preview(self.filtered_files[focus])
+		except IndexError:
+			self.show_preview(None)
+		except AttributeError:
+			pass
 
 	def apply_hidden(self, show_hidden):
 		self.show_hidden = show_hidden
@@ -537,6 +566,23 @@ class Panel(urwid.WidgetWrap):
 			self.details.set_text(file['details'])
 		else:
 			self.details.set_text(' ')
+
+	def show_preview(self, file):
+		if not (self.controller.screen.show_preview and self.focused):
+			return
+
+		if file:
+			self.controller.screen.preview_panel.set_title(file['file'].name)
+
+			if stat.S_ISDIR(file['stat'].st_mode):
+				self.controller.screen.preview_panel.read_directory(file['file'])
+			elif stat.S_ISREG(file['stat'].st_mode):
+				self.controller.screen.preview_panel.read_file(file['file'], file['stat'].st_size)
+			else:
+				self.controller.screen.preview_panel.clear()
+		else:
+			self.controller.screen.preview_panel.clear_title()
+			self.controller.screen.preview_panel.clear()
 
 	def filter(self, filter):
 		if not filter:

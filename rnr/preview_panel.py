@@ -51,7 +51,8 @@ class PreviewPanel(urwid.WidgetWrap):
 
 		self.walker = urwid.SimpleFocusListWalker([])
 		self.listbox = rnrview.FileViewListBox(controller, controller.tabsize, use_line_highlight=True)
-		listbox = urwid.LineBox(self.listbox, tline='', bline='')
+		self.attr_listbox = urwid.AttrMap(self.listbox, 'Text')
+		listbox = urwid.LineBox(self.attr_listbox, tline='', bline='')
 		listbox = urwid.AttrMap(listbox, 'panel')
 
 		self.footer = TLineWidget(urwid.Text('', layout=TildeLayout), title_align='right', lcorner='└', rcorner='┘')
@@ -67,6 +68,7 @@ class PreviewPanel(urwid.WidgetWrap):
 
 	def read_file(self, filename, file_size):
 		try:
+			self.attr_listbox.set_attr_map({None: 'Text'})
 			self.listbox.read_file(filename, file_size)
 			self.cwd = Path(filename).parent
 		except OSError:
@@ -74,6 +76,7 @@ class PreviewPanel(urwid.WidgetWrap):
 
 	def read_directory(self, filename):
 		try:
+			self.attr_listbox.set_attr_map({None: 'panel'})
 			self.listbox.read_directory(filename)
 			self.cwd = Path(filename)
 		except OSError:

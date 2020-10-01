@@ -566,11 +566,9 @@ class BaseTextFileWalker(urwid.ListWalker):
 
 		return new_pos
 
-	def highlight_line(self, pos, attr):
+	def highlight_line(self, line, attr):
 		if not self.search_expression:
-			return self.lines[pos]
-
-		line = self.lines[pos]
+			return line
 
 		len_part = 0
 		part_offset = []
@@ -621,13 +619,13 @@ class BaseTextFileWalker(urwid.ListWalker):
 		return new_line
 
 class TextFileWalker(BaseTextFileWalker):
-	def __init__(self, fh, file_size, code, filename, tabsize):
+	def __init__(self, fh, file_size, code, filename, tabsize, use_line_highlight):
 		self.fh = fh
 		self.file_size = file_size
 		self.code = code.splitlines(keepends=True)
 		self.filename = filename
 		self.tabsize = tabsize
-		self.lines = []
+		self.use_line_highlight = use_line_highlight
 		self.focus = 0
 		self.search_expression = None
 		self.search_backwards = False
@@ -639,31 +637,34 @@ class TextFileWalker(BaseTextFileWalker):
 			else:
 				filename = self.filename
 
-			lexer = pygments.lexers.get_lexer_for_filename(filename, stripnl=False, tabsize=self.tabsize)
+			self.lexer = pygments.lexers.get_lexer_for_filename(filename, stripnl=False, tabsize=self.tabsize)
 		except pygments.util.ClassNotFound:
 			try:
-				lexer = pygments.lexers.guess_lexer(code, stripnl=False, tabsize=self.tabsize)
+				self.lexer = pygments.lexers.guess_lexer(code, stripnl=False, tabsize=self.tabsize)
 			except pygments.util.ClassNotFound:
-				lexer = pygments.lexers.special.TextLexer(stripnl=False, tabsize=self.tabsize)
+				self.lexer = pygments.lexers.special.TextLexer(stripnl=False, tabsize=self.tabsize)
 
-		del self.lines[:]
-		line = []
-		result = pygments.lex(code, lexer)
-		for tokentype, value in result:
-			for k, v in StyleFromToken.items():
-				if tokentype in k:
-					style = v
-					break
-			else:
-				style = 'Text'
-
-			for l in value.splitlines(keepends=True):
-				if ReNewLine.search(l):
-					line.append((style, ReNewLine.sub('', l)))
-					self.lines.append(line)
-					line = []
+		if self.use_line_highlight:
+			self.lines = self.code
+		else:
+			self.lines = []
+			line = []
+			result = pygments.lex(code, self.lexer)
+			for tokentype, value in result:
+				for k, v in StyleFromToken.items():
+					if tokentype in k:
+						style = v
+						break
 				else:
-					line.append((style, l))
+					style = 'Text'
+
+				for l in value.splitlines(keepends=True):
+					if ReNewLine.search(l):
+						line.append((style, ReNewLine.sub('', l)))
+						self.lines.append(line)
+						line = []
+					else:
+						line.append((style, l))
 
 		self.len_lines = len(self.lines)
 		self.digits = len(str(self.len_lines))
@@ -674,7 +675,7 @@ class TextFileWalker(BaseTextFileWalker):
 			return (None, None)
 
 
-		line = self.highlight_line(pos, 'markselect')
+		line = self.highlight_line(self.lines[pos], 'markselect')
 		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
 
 		return (w, pos)
@@ -684,7 +685,7 @@ class TextFileWalker(BaseTextFileWalker):
 		if pos >= self.len_lines:
 			return (None, None)
 
-		line = self.highlight_line(pos, 'selected')
+		line = self.highlight_line(self.lines[pos], 'selected')
 		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
 
 		return (w, pos)
@@ -694,10 +695,32 @@ class TextFileWalker(BaseTextFileWalker):
 		if pos < 0:
 			return (None, None)
 
-		line = self.highlight_line(pos, 'selected')
+		line = self.highlight_line(self.lines[pos], 'selected')
 		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
 
 		return (w, pos)
+
+	def highlight_line(self, code, attr):
+		if self.use_line_highlight:
+			line = []
+			result = pygments.lex(code, self.lexer)
+			for tokentype, value in result:
+				for k, v in StyleFromToken.items():
+					if tokentype in k:
+						style = v
+						break
+				else:
+					style = 'Text'
+
+				if ReNewLine.search(value):
+					line.append((style, ReNewLine.sub('', value)))
+				else:
+					line.append((style, value))
+		else:
+			line = code
+
+		return super().highlight_line(line, attr)
+
 
 class TextDirectoryWalker(BaseTextFileWalker):
 	def __init__(self, files, filename):
@@ -723,7 +746,7 @@ class TextDirectoryWalker(BaseTextFileWalker):
 
 
 		file = self.files[pos]
-		line = self.highlight_line(pos, 'markselect')
+		line = self.highlight_line(self.lines[pos], 'markselect')
 		w = urwid.Columns([urwid.Text(line, wrap='clip'), ('pack', urwid.Text((file['palette'], file['size']))), ('pack', urwid.Text((file['palette'], format_date(file['lstat'].st_mtime))))], dividechars=1)
 
 		return (w, pos)
@@ -734,7 +757,7 @@ class TextDirectoryWalker(BaseTextFileWalker):
 			return (None, None)
 
 		file = self.files[pos]
-		line = self.highlight_line(pos, 'selected')
+		line = self.highlight_line(self.lines[pos], 'selected')
 		w = urwid.Columns([urwid.Text(line, wrap='clip'), ('pack', urwid.Text((file['palette'], file['size']))), ('pack', urwid.Text((file['palette'], format_date(file['lstat'].st_mtime))))], dividechars=1)
 
 		return (w, pos)
@@ -745,16 +768,17 @@ class TextDirectoryWalker(BaseTextFileWalker):
 			return (None, None)
 
 		file = self.files[pos]
-		line = self.highlight_line(pos, 'selected')
+		line = self.highlight_line(self.lines[pos], 'selected')
 		w = urwid.Columns([urwid.Text(line, wrap='clip'), ('pack', urwid.Text((file['palette'], file['size']))), ('pack', urwid.Text((file['palette'], format_date(file['lstat'].st_mtime))))], dividechars=1)
 
 		return (w, pos)
 
 
 class FileViewListBox(urwid.ListBox):
-	def __init__(self, controller, tabsize):
+	def __init__(self, controller, tabsize, use_line_highlight):
 		self.controller = controller
 		self.tabsize = tabsize
+		self.use_line_highlight = use_line_highlight
 		self.clear_walker = urwid.SimpleFocusListWalker([])
 		self.walker = self.clear_walker
 		self.hex_walker = None
@@ -837,7 +861,7 @@ class FileViewListBox(urwid.ListBox):
 
 		del self.line_offset[-1]
 
-		w = TextFileWalker(fh, self.file_size, code, self.filename, self.tabsize)
+		w = TextFileWalker(fh, self.file_size, code, self.filename, self.tabsize, self.use_line_highlight)
 		self.lines = w.lines
 		self.len_lines = w.len_lines
 
@@ -1163,7 +1187,7 @@ class Screen(urwid.WidgetWrap):
 
 		top = TopBar(filename)
 
-		self.list_box = FileViewListBox(controller, tabsize)
+		self.list_box = FileViewListBox(controller, tabsize, use_line_highlight=False)
 
 		try:
 			self.list_box.read_file(filename, file_size)
@@ -1257,7 +1281,7 @@ def keypress(controller, key):
 		controller.screen.list_box.search_next()
 	elif key == 'N':
 		controller.screen.list_box.search_prev()
-	elif key in ('tab', 'shift tab'):
+	elif key in ('tab', 'shift tab', 'ctrl u', 'ctrl q'):
 		if controller.focused_quickviewer:
 			controller.set_input_rnr()
 			controller.keypress(key)

@@ -18,6 +18,7 @@ Its main goal is to be the most robust file copier in existence.
 * Text and binary file viewer with line numbers and syntax highlighting for
   text, and masked data for binary, with optional hex display mode for both
   formats
+* Optional file and directory preview in the other panel
 * If the internal file viewer is not used, view files with the selected pager
   (default: less)
 * Edit files with the selected editor (default: vi)
@@ -130,5 +131,4 @@ operation as well.
 
 * Connect to SFTP servers and transfer files to/from them
 * Explore/create compressed archives
-* A simple file and directory preview in the other panel
 

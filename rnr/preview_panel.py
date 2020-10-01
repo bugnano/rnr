@@ -50,7 +50,7 @@ class PreviewPanel(urwid.WidgetWrap):
 		title = urwid.AttrMap(self.title, 'panel')
 
 		self.walker = urwid.SimpleFocusListWalker([])
-		self.listbox = rnrview.FileViewListBox(controller, controller.tabsize)
+		self.listbox = rnrview.FileViewListBox(controller, controller.tabsize, use_line_highlight=True)
 		listbox = urwid.LineBox(self.listbox, tline='', bline='')
 		listbox = urwid.AttrMap(listbox, 'panel')
 

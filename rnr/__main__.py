@@ -356,21 +356,31 @@ class App(object):
 				os.kill(os.getpid(), signal.SIGWINCH)
 				self.reload()
 			elif key == 'ctrl q':
+				pos = self.screen.center.focus_position ^ 1
 				if self.screen.left is self.screen.center.focus:
 					if self.screen.show_preview:
 						self.screen.show_preview = False
-						self.screen.center.contents[1] = (self.screen.right, self.screen.center.options())
+						self.screen.center.contents[pos] = (self.screen.right, self.screen.center.options())
 					else:
 						self.screen.show_preview = True
-						self.screen.center.contents[1] = (self.screen.preview_panel, self.screen.center.options())
+						self.screen.center.contents[pos] = (self.screen.preview_panel, self.screen.center.options())
 				elif self.screen.right is self.screen.center.focus:
 					if self.screen.show_preview:
 						self.screen.show_preview = False
-						self.screen.center.contents[0] = (self.screen.left, self.screen.center.options())
+						self.screen.center.contents[pos] = (self.screen.left, self.screen.center.options())
 					else:
 						self.screen.show_preview = True
-						self.screen.center.contents[0] = (self.screen.preview_panel, self.screen.center.options())
+						self.screen.center.contents[pos] = (self.screen.preview_panel, self.screen.center.options())
+				else:
+					if self.screen.center.contents[pos][0] == self.screen.left:
+						self.screen.show_preview = False
+						self.screen.center.contents[self.screen.center.focus_position] = (self.screen.right, self.screen.center.options())
+					else:
+						self.screen.show_preview = False
+						self.screen.center.contents[self.screen.center.focus_position] = (self.screen.left, self.screen.center.options())
 
+
+				self.screen.update_focus()
 				self.reload()
 			elif key == 'f7':
 				self.screen.command_bar.mkdir(self.screen.center.focus.cwd)

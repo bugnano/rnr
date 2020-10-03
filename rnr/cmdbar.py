@@ -137,7 +137,7 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('mkdir', 'mkdir: ', '')
 
 	def do_mkdir(self):
-		new_dir = Path(self.edit.get_edit_text())
+		new_dir = Path(apply_template(self.edit.get_edit_text(), self.screen, quote=False))
 		try:
 			new_dir = new_dir.expanduser()
 		except RuntimeError:

@@ -108,10 +108,12 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 	dest = Path(dest)
 
+	default_block_size = 2 ** 23
 	try:
-		block_size = max(dest.lstat().st_blksize, 131072)
+		fs_block_size = dest.lstat().st_blksize
+		block_size = max(fs_block_size, default_block_size + ((fs_block_size - default_block_size) % fs_block_size))
 	except (OSError, AttributeError):
-		block_size = 131072
+		block_size = default_block_size
 
 	info = {
 		'cur_source': '',

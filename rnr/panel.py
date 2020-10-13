@@ -663,7 +663,7 @@ class Panel(urwid.WidgetWrap):
 
 	def update_tagged_count(self):
 		if self.tagged_files:
-			self.details_separator.set_title(f' {len(self.tagged_files)} File(s) Tagged ')
+			self.details_separator.set_title(f' {human_readable_size(sum([x.lstat().st_size for x in self.tagged_files if not stat.S_ISDIR(x.lstat().st_mode)]))} in {len(self.tagged_files)} file{("s" if len(self.tagged_files) != 1 else "")} ')
 			self.details_separator.set_title_attr('marked')
 		else:
 			self.details_separator.set_title('─')

@@ -211,6 +211,8 @@ class App(object):
 		if key == 'esc':
 			self.screen.command_bar.reset()
 			self.leader = ''
+			self.screen.left.filter('')
+			self.screen.right.filter('')
 		elif self.leader == 's':
 			if key == 'n':
 				self.screen.left.sort('sort_by_name')

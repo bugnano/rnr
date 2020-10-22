@@ -382,10 +382,10 @@ class Panel(urwid.WidgetWrap):
 		self.filtered_files = []
 		self.tagged_files = set()
 
+		self.focused = False
+
 		self.chdir(cwd)
 		self.walker.set_focus(0)
-
-		self.focused = False
 
 		super().__init__(self.pile)
 
@@ -568,7 +568,7 @@ class Panel(urwid.WidgetWrap):
 			self.details.set_text(' ')
 
 	def show_preview(self, file):
-		if not (self.controller.screen.show_preview and self.focused):
+		if not (self.focused and self.controller.screen.show_preview):
 			return
 
 		if file:

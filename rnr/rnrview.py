@@ -789,6 +789,8 @@ class FileViewListBox(urwid.ListBox):
 
 	def clear(self):
 		self.walker = self.clear_walker
+		self.hex_walker = None
+
 		self.body = self.walker
 
 	def read_file(self, filename, file_size):

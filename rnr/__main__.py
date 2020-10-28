@@ -381,6 +381,8 @@ class App(object):
 						self.screen.show_preview = False
 						self.screen.center.contents[self.screen.center.focus_position] = (self.screen.left, self.screen.center.options())
 
+				if not self.screen.show_preview:
+					self.screen.preview_panel.clear()
 
 				self.screen.update_focus()
 				self.reload()

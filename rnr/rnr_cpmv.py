@@ -36,7 +36,13 @@ from .fallocate import *
 def rnr_copyfile(cur_file, cur_target, file_size, block_size, resume, info, timers, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort):
 	with open(cur_file, 'rb') as fh:
 		if resume:
-			target_fd = os.open(cur_target, os.O_WRONLY | os.O_DSYNC, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
+			try:
+				target_fd = os.open(cur_target, os.O_WRONLY | os.O_DSYNC, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
+			except OSError as e:
+				if e.errno == errno.EOPNOTSUPP:
+					target_fd = os.open(cur_target, os.O_TRUNC | os.O_WRONLY | os.O_DSYNC, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
+				else:
+					raise
 		else:
 			target_fd = os.open(cur_target, os.O_CREAT | os.O_EXCL | os.O_TRUNC | os.O_WRONLY | os.O_DSYNC, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
 
@@ -361,6 +367,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 					if not in_error:
 						if not file['is_dir']:
+							when = 'lchown'
 							try:
 								os.lchown(cur_target, file['lstat'].st_uid, file['lstat'].st_gid)
 							except OSError as e:
@@ -368,10 +375,12 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 									try:
 										os.lchown(cur_target, -1, file['lstat'].st_gid)
 									except OSError as e:
-										if e.errno == errno.EPERM:
+										if e.errno in (errno.EPERM, errno.ENOSYS):
 											pass
 										else:
 											raise
+								elif e.errno == errno.ENOSYS:
+									pass
 								else:
 									raise
 
@@ -497,6 +506,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				parent_dir = cur_target.resolve().parent
 
 				if entry['new_dir']:
+					when = 'lchown'
 					try:
 						os.lchown(cur_target, file['lstat'].st_uid, file['lstat'].st_gid)
 					except OSError as e:
@@ -504,10 +514,12 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 							try:
 								os.lchown(cur_target, -1, file['lstat'].st_gid)
 							except OSError as e:
-								if e.errno == errno.EPERM:
+								if e.errno in (errno.EPERM, errno.ENOSYS):
 									pass
 								else:
 									raise
+						elif e.errno == errno.ENOSYS:
+							pass
 						else:
 							raise
 

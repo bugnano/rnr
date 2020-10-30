@@ -151,7 +151,7 @@ class CmdBar(urwid.WidgetWrap):
 		try:
 			os.makedirs(new_dir, exist_ok=True)
 			self.controller.reload(new_dir, only_focused=True)
-		except (PermissionError, FileExistsError) as e:
+		except OSError as e:
 			self.screen.error(f'{e.strerror} ({e.errno})')
 
 	def rename(self, file, mode):

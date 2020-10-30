@@ -55,6 +55,7 @@ from .dlg_cpmv_progress import DlgCpMvProgress
 from .rnr_cpmv import rnr_cpmv
 from .database import DataBase
 from .dlg_pending_job import DlgPendingJob
+from .dlg_cancelable import DlgCancelable
 from .debug_print import (debug_print, debug_pprint, set_debug_fh)
 
 
@@ -133,6 +134,19 @@ class Screen(urwid.WidgetWrap):
 
 		self.pile.contents[self.main_area] = (urwid.Overlay(DlgError(self, e, title, error), self.center,
 			'center', len(e) + 6,
+			'middle', 'pack',
+		), self.pile.options())
+
+		self.in_error = True
+
+	def open_cancelable(self, title, message, on_cancel):
+		try:
+			self.center.focus.force_focus()
+		except AttributeError:
+			pass
+
+		self.pile.contents[self.main_area] = (urwid.Overlay(DlgCancelable(self, title, message, on_cancel), self.center,
+			'center', len(message) + 6,
 			'middle', 'pack',
 		), self.pile.options())
 
@@ -733,6 +747,8 @@ class App(object):
 
 	def close_viewer(self, key):
 		if self.old_screen:
+			self.screen.list_box.clear()
+
 			self.screen = self.old_screen
 			self.old_screen = None
 			self.loop.widget = self.screen

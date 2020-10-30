@@ -19,7 +19,6 @@
 import sys
 import os
 
-import re
 import stat
 import pwd
 import grp
@@ -28,7 +27,7 @@ import collections
 import shutil
 import subprocess
 import signal
-import unicodedata
+import tempfile
 
 from pathlib import Path
 
@@ -36,20 +35,30 @@ import urwid
 
 from fuzzyfinder import fuzzyfinder
 
-from .utils import (human_readable_size, format_date, tar_stem, tar_suffix, TildeLayout, TLineWidget)
+from .utils import (human_readable_size, format_date, natsort_key, tar_stem, tar_suffix, TildeLayout, TLineWidget)
 from .debug_print import (debug_print, debug_pprint)
 
 
-ReNumbers = re.compile(r'(\d+)')
+ARCHIVE_EXTENSIONS = list(map(natsort_key, [
+	'.tar',
+	'.tar.gz', '.tgz', '.taz'
+	'.tar.Z', '.taZ',
+	'.tar.bz2', '.tz2', '.tbz2', '.tbz',
+	'.tar.lz',
+	'.tar.lzma', '.tlz',
+	'.tar.lzo',
+	'.tar.xz',
+	'.tar.zst', '.tzst',
+	'.rpm', '.deb',
+	'.iso',
+	'.zip', '.jar', '.zipx',
+	'.shar',
+	'.lha', '.lzh',
+	'.rar',
+	'.cab',
+	'.7z',
+]))
 
-def try_int(s):
-	try:
-		return ('0', int(s))
-	except ValueError:
-		return (s, 0)
-
-def natsort_key(s):
-	return [try_int(x) for x in ReNumbers.split(unicodedata.normalize('NFKD', s.casefold()))]
 
 def sort_by_name(a, b, reverse=False):
 	if stat.S_ISDIR(a['stat'].st_mode) and (not stat.S_ISDIR(b['stat'].st_mode)):
@@ -156,7 +165,10 @@ def get_file_list(cwd):
 				obj['palette'] = 'executable'
 			else:
 				obj['label'] = f' {file.name}'
-				obj['palette'] = 'panel'
+				if obj['extension'] in ARCHIVE_EXTENSIONS:
+					obj['palette'] = 'archive'
+				else:
+					obj['palette'] = 'panel'
 
 		obj['stat'] = st
 
@@ -274,6 +286,11 @@ class VimListBox(urwid.ListBox):
 		elif key in ('l', 'right', 'enter'):
 			try:
 				self.model.execute(self.model.walker.get_focus()[0].model)
+			except AttributeError:
+				pass
+		elif key == 'o':
+			try:
+				self.model.open_archive(self.model.walker.get_focus()[0].model, fallback_exec=False)
 			except AttributeError:
 				pass
 		elif key in ('g', 'home'):
@@ -514,7 +531,76 @@ class Panel(urwid.WidgetWrap):
 		else:
 			self.filtered_files = self.shown_files[:]
 
-	def execute(self, file):
+	def open_archive(self, file, fallback_exec=True):
+		self.archive_file = file
+		self.fallback_exec = fallback_exec
+
+		self.temp_dir = Path(tempfile.mkdtemp())
+		try:
+			self.archivemount_proc = subprocess.Popen(['archivemount', '-o', 'ro', self.archive_file['file'].name, str(self.temp_dir)], cwd=self.cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+			try:
+				self.archivemount_proc.communicate(timeout=0.05)
+			except subprocess.TimeoutExpired:
+				self.controller.screen.open_cancelable('archivemount', 'Opening archive...', self.on_cancel_archivemount)
+
+			self.archivemount_alarm_cb()
+		except FileNotFoundError:
+			try:
+				os.rmdir(self.temp_dir)
+			except OSError:
+				pass
+
+			if self.fallback_exec:
+				self.execute(self.archive_file, open_archive=False)
+			else:
+				self.controller.screen.error('archivemount executable not found')
+
+	def on_cancel_archivemount(self):
+		self.controller.screen.close_dialog()
+		self.controller.loop.remove_alarm(self.archivemount_alarm_handle)
+
+		self.archivemount_proc.terminate()
+		while self.archivemount_proc.poll() is None:
+			pass
+
+		try:
+			umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+		except FileNotFoundError:
+			pass
+
+		try:
+			os.rmdir(self.temp_dir)
+		except OSError:
+			pass
+
+	def archivemount_alarm_cb(self, loop=None, user_data=None):
+		if self.archivemount_proc.poll() is None:
+			self.archivemount_alarm_handle = self.controller.loop.set_alarm_in(0.05, self.archivemount_alarm_cb)
+		else:
+			self.controller.screen.close_dialog()
+
+			if self.archivemount_proc.returncode != 0:
+				try:
+					umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+				except FileNotFoundError:
+					pass
+
+				try:
+					os.rmdir(self.temp_dir)
+				except OSError:
+					pass
+
+				(stdout_data, stderr_data) = self.archivemount_proc.communicate()
+				self.controller.screen.error(stderr_data.strip())
+				if self.fallback_exec:
+					self.execute(self.archive_file, open_archive=False)
+			else:
+				self.chdir(self.temp_dir)
+
+			self.archivemount_proc = None
+
+	def execute(self, file, open_archive=True):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
 		elif 'link_target' in file:
@@ -532,6 +618,8 @@ class Panel(urwid.WidgetWrap):
 						self.chdir(file['link_target'].parent, file['link_target'])
 			except (FileNotFoundError, PermissionError):
 				pass
+		elif open_archive and (file['extension'] in ARCHIVE_EXTENSIONS):
+			self.open_archive(file)
 		else:
 			self.controller.loop.stop()
 			subprocess.run([self.controller.opener, file['file'].name], cwd=self.cwd)

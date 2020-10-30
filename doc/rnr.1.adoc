@@ -60,6 +60,7 @@ https://ranger.github.io/[Ranger]
 *j, DOWN*:: Go to the next list element
 *k, UP*:: Go to the previous list element
 *l, RIGHT, ENTER*:: Enter directory / Follow symlink / Open file with the selected opener
+*o*:: Open archive as a read-only directory
 *g, HOME*:: Go to the top of the list
 *G, END*:: Go to the bottom of the list
 *CTRL-B, PAGE UP*:: Go up a page in the list
@@ -107,7 +108,7 @@ https://ranger.github.io/[Ranger]
 
 
 == SUBSTITUTIONS
-The following substitutions are available for the shell, rename, copy and move commands:
+The following substitutions are available for the shell, mkdir, rename, copy and move commands:
 
 _%f_:: The current file
 _%n_:: The current file name without extension

@@ -11,6 +11,7 @@ Its main goal is to be the most robust file copier in existence.
 ## Features
 
 * Very fast file and directory browser with Vim-style keys and powerful fuzzy filter
+* Explore compressed archives as normal read-only directories (requires archivemount)
 * Fast directory jumping with bookmarks
 * Many file rename options
 * Robust file copy engine with minimal user interaction. Great for copying
@@ -23,7 +24,8 @@ Its main goal is to be the most robust file copier in existence.
   (default: less)
 * Edit files with the selected editor (default: vi)
 * Open files with the selected opener (default: xdg-open)
-* Execute shell commands on the selected files
+* Execute shell commands, with macro substitutions to easily manipulate the
+  tagged files
 * cd to the last visited directory on exit (compatible with bash and fish)
 
 ## Screenshots
@@ -37,6 +39,7 @@ Its main goal is to be the most robust file copier in existence.
 * Linux (a POSIX-compatible OS like macOS, FreeBSD or Cygwin may work, but
   it's not officially supported)
 * Python 3.6 or greater
+* archivemount (Optional, but recommended)
 
 ## Installation and running
 
@@ -130,5 +133,4 @@ operation as well.
 ## Roadmap
 
 * Connect to SFTP servers and transfer files to/from them
-* Explore/create compressed archives
 

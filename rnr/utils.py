@@ -22,12 +22,17 @@ import os
 import datetime
 import string
 import shlex
+import unicodedata
+import re
 
 from pathlib import Path
 
 import urwid
 
 from .debug_print import (debug_print, debug_pprint)
+
+
+ReNumbers = re.compile(r'(\d+)')
 
 
 def human_readable_size(size):
@@ -60,6 +65,15 @@ def format_seconds(t):
 		return f'{days}d{hours:02d}:{minutes:02d}:{seconds:02d}'
 	else:
 		return f'{hours:02d}:{minutes:02d}:{seconds:02d}'
+
+def try_int(s):
+	try:
+		return ('0', int(s))
+	except ValueError:
+		return (s, 0)
+
+def natsort_key(s):
+	return [try_int(x) for x in ReNumbers.split(unicodedata.normalize('NFKD', s.casefold()))]
 
 def tar_stem(file):
 	p = Path(file)

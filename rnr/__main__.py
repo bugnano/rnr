@@ -21,6 +21,7 @@ import os
 
 import argparse
 import shutil
+import subprocess
 import stat
 import signal
 import functools
@@ -176,6 +177,7 @@ class App(object):
 		self.editor = EDITOR
 		self.use_internal_viewer = USE_INTERNAL_VIEWER
 
+		self.archive_dirs = []
 		self.old_screen = None
 		self.loop = None
 		self.screen = Screen(self)
@@ -765,11 +767,70 @@ class App(object):
 		self.screen.bottom.set_labels(Labels)
 		self.loop._unhandled_input = self.keypress
 
+	def unarchive_path(self, file):
+		file = Path(file)
+
+		for archive_file, temp_dir, panels in reversed(self.archive_dirs):
+			if (file == archive_file) or (archive_file in file.parents):
+				file = Path(str(file).replace(str(archive_file), str(temp_dir), 1))
+				break
+		else:
+			archive_file = None
+			temp_dir = None
+
+		return (file, archive_file, temp_dir)
+
+	def add_archive_dir(self, archive_file, temp_dir, panel):
+		for existing_archive_file, existing_temp_dir, panels in self.archive_dirs:
+			if (archive_file == existing_archive_file) and (temp_dir == existing_temp_dir):
+				panels.add(panel)
+				break
+		else:
+			self.archive_dirs.append((archive_file, temp_dir, {panel}))
+			self.archive_dirs.sort(key=lambda x: str(x[0]).replace(os.sep, '\0'))
+
+	def update_archive_dirs(self, cwd, panel):
+		i_umount = []
+		last_index = len(self.archive_dirs) - 1
+		for i, (archive_file, temp_dir, panels) in enumerate(reversed(self.archive_dirs)):
+			if (cwd == archive_file) or (archive_file in cwd.parents):
+				panels.add(panel)
+			else:
+				panels.discard(panel)
+				if not panels:
+					i_umount.append(last_index - i)
+
+		for i in i_umount:
+			(archive_file, temp_dir, panels) = self.archive_dirs.pop(i)
+
+			try:
+				umount_proc = subprocess.run(['umount', temp_dir], cwd=self.unarchive_path(cwd)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+			except FileNotFoundError:
+				pass
+
+			try:
+				os.rmdir(temp_dir)
+			except OSError:
+				pass
+
 	def quit(self):
+		cwd = self.screen.center.focus.cwd
+		while True:
+			(cwd, archive_file, temp_dir) = self.unarchive_path(cwd)
+			if not archive_file:
+				break
+
+			cwd = archive_file.parent
+
+		self.screen.left.show_preview(None)
+		self.screen.right.show_preview(None)
+		self.update_archive_dirs(cwd, self.screen.left)
+		self.update_archive_dirs(cwd, self.screen.right)
+
 		if self.printwd:
 			try:
 				with open(self.printwd, 'w') as fh:
-					fh.write(str(self.screen.center.focus.cwd))
+					fh.write(str(cwd))
 			except (FileNotFoundError, PermissionError):
 				pass
 

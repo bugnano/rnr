@@ -51,7 +51,7 @@ ARCHIVE_EXTENSIONS = list(map(natsort_key, [
 	'.tar.zst', '.tzst',
 	'.rpm', '.deb',
 	'.iso',
-	'.zip', '.zipx',
+	'.zip', '.zipx', '.jar', '.apk',
 	'.shar',
 	'.lha', '.lzh',
 	'.rar',
@@ -109,27 +109,17 @@ def sort_by_size(a, b, reverse=False):
 		return sort_by_name(a, b, reverse)
 
 
-def unarchive_path(file, archive_dirs=None):
-	for archive_file, temp_dir in reversed(archive_dirs):
-		if (file == archive_file) or (archive_file in file.parents):
-			file = Path(str(file).replace(str(archive_file), str(temp_dir), 1))
-			break
-	else:
-		archive_file = None
-		temp_dir = None
-
-	return (file, archive_file, temp_dir)
-
-def get_file_list(cwd, archive_dirs=None):
+def get_file_list(cwd, unarchive_path=None):
 	cwd = Path(cwd)
 
-	if archive_dirs is None:
-		archive_dirs = []
+	if unarchive_path is None:
+		archive_file = None
+		temp_dir = None
+	else:
+		(cwd, archive_file, temp_dir) = unarchive_path(cwd)
 
 	uid_cache = Cache(lambda x: pwd.getpwuid(x).pw_name)
 	gid_cache = Cache(lambda x: grp.getgrgid(x).gr_name)
-
-	(cwd, archive_file, temp_dir) = unarchive_path(cwd, archive_dirs)
 
 	files = []
 	for file in cwd.iterdir():
@@ -426,7 +416,7 @@ class Panel(urwid.WidgetWrap):
 		self.fallback_exec = None
 		self.archivemount_proc = None
 		self.archivemount_alarm_handle = None
-		self.archive_dirs = []
+		self.unarchive_path = controller.unarchive_path
 
 		self.chdir(cwd)
 		self.walker.set_focus(0)
@@ -489,36 +479,18 @@ class Panel(urwid.WidgetWrap):
 		self.pile.contents[1] = listbox
 
 		try:
-			files = get_file_list(cwd, self.archive_dirs)
+			files = get_file_list(cwd, self.unarchive_path)
 		except (FileNotFoundError, PermissionError):
 			return False
 
 		self.show_preview(None)
-
-		i_umount = []
-		last_index = len(self.archive_dirs) - 1
-		for i, (archive_file, temp_dir) in enumerate(reversed(self.archive_dirs)):
-			if not ((cwd == archive_file) or (archive_file in cwd.parents)):
-				i_umount.append(last_index - i)
-
-		for i in i_umount:
-			(archive_file, temp_dir) = self.archive_dirs.pop(i)
-
-			try:
-				umount_proc = subprocess.run(['umount', temp_dir], cwd=unarchive_path(cwd, self.archive_dirs)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-			except FileNotFoundError:
-				pass
-
-			try:
-				os.rmdir(temp_dir)
-			except OSError:
-				pass
+		self.controller.update_archive_dirs(cwd, self)
 
 		self.files = files
 		self.apply_hidden(self.show_hidden)
 		self.apply_filter(self.file_filter)
 		self.update_list_box(focus_path, focus_position)
-		self.footer.set_title(f' Free: {human_readable_size(shutil.disk_usage(unarchive_path(cwd, self.archive_dirs)[0]).free)} ')
+		self.footer.set_title(f' Free: {human_readable_size(shutil.disk_usage(self.unarchive_path(cwd)[0]).free)} ')
 
 		return True
 
@@ -579,12 +551,17 @@ class Panel(urwid.WidgetWrap):
 			self.filtered_files = self.shown_files[:]
 
 	def open_archive(self, file, fallback_exec=True):
+		(_, archive_file, temp_dir) = self.unarchive_path(file['file'])
+		if file['file'] == archive_file:
+			self.chdir(file['file'])
+			return
+
 		self.archive_file = file
 		self.fallback_exec = fallback_exec
 
 		self.temp_dir = Path(tempfile.mkdtemp())
 		try:
-			self.archivemount_proc = subprocess.Popen(['archivemount', '-o', 'ro', self.archive_file['file'].name, str(self.temp_dir)], cwd=unarchive_path(self.cwd, self.archive_dirs)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+			self.archivemount_proc = subprocess.Popen(['archivemount', '-o', 'ro', self.archive_file['file'].name, str(self.temp_dir)], cwd=self.unarchive_path(self.cwd)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
 			try:
 				self.archivemount_proc.communicate(timeout=0.05)
@@ -612,7 +589,7 @@ class Panel(urwid.WidgetWrap):
 			pass
 
 		try:
-			umount_proc = subprocess.run(['umount', self.temp_dir], cwd=unarchive_path(self.cwd, self.archive_dirs)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+			umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.unarchive_path(self.cwd)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 		except FileNotFoundError:
 			pass
 
@@ -632,7 +609,7 @@ class Panel(urwid.WidgetWrap):
 
 			if self.archivemount_proc.returncode != 0:
 				try:
-					umount_proc = subprocess.run(['umount', self.temp_dir], cwd=unarchive_path(self.cwd, self.archive_dirs)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+					umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.unarchive_path(self.cwd)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 				except FileNotFoundError:
 					pass
 
@@ -646,7 +623,7 @@ class Panel(urwid.WidgetWrap):
 				if self.fallback_exec:
 					self.execute(self.archive_file, open_archive=False)
 			else:
-				self.archive_dirs.append((self.archive_file['file'], self.temp_dir))
+				self.controller.add_archive_dir(self.archive_file['file'], self.temp_dir, self)
 				self.chdir(self.archive_file['file'])
 
 			self.archivemount_proc = None
@@ -657,10 +634,10 @@ class Panel(urwid.WidgetWrap):
 			self.chdir(file['file'])
 		elif 'link_target' in file:
 			try:
-				if unarchive_path(file['link_target'], self.archive_dirs)[0].is_dir():
+				if self.unarchive_path(file['link_target'])[0].is_dir():
 					if file['link_target'] != self.cwd:
 						self.chdir(file['link_target'])
-				elif os.path.lexists(unarchive_path(file['link_target'], self.archive_dirs)[0]):
+				elif os.path.lexists(self.unarchive_path(file['link_target'])[0]):
 					if file['link_target'].parent == self.cwd:
 						for (i, line) in enumerate(self.walker):
 							if line.model['file'] == file['link_target']:
@@ -674,7 +651,7 @@ class Panel(urwid.WidgetWrap):
 			self.open_archive(file)
 		else:
 			self.controller.loop.stop()
-			subprocess.run([self.controller.opener, file['file'].name], cwd=unarchive_path(self.cwd, self.archive_dirs)[0])
+			subprocess.run([self.controller.opener, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
 			self.controller.reload()
@@ -683,17 +660,17 @@ class Panel(urwid.WidgetWrap):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
 		elif self.controller.use_internal_viewer:
-			self.controller.view(unarchive_path(file['file'], self.archive_dirs)[0])
+			self.controller.view(self.unarchive_path(file['file'])[0])
 		else:
 			self.controller.loop.stop()
-			subprocess.run([self.controller.pager, file['file'].name], cwd=unarchive_path(self.cwd, self.archive_dirs)[0])
+			subprocess.run([self.controller.pager, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
 			self.controller.reload()
 
 	def edit(self, file):
 		self.controller.loop.stop()
-		subprocess.run([self.controller.editor, file['file'].name], cwd=unarchive_path(self.cwd, self.archive_dirs)[0])
+		subprocess.run([self.controller.editor, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
 		self.controller.reload()
@@ -714,7 +691,7 @@ class Panel(urwid.WidgetWrap):
 		if file:
 			self.controller.screen.preview_panel.set_title(file['file'].name)
 
-			file_to_preview = unarchive_path(file['file'], self.archive_dirs)[0]
+			file_to_preview = self.unarchive_path(file['file'])[0]
 
 			if stat.S_ISDIR(file['stat'].st_mode):
 				self.controller.screen.preview_panel.read_directory(file_to_preview)
@@ -805,7 +782,7 @@ class Panel(urwid.WidgetWrap):
 
 	def update_tagged_count(self):
 		if self.tagged_files:
-			self.details_separator.set_title(f' {human_readable_size(sum([x.lstat().st_size for x in self.tagged_files if not stat.S_ISDIR(x.lstat().st_mode)]))} in {len(self.tagged_files)} file{("s" if len(self.tagged_files) != 1 else "")} ')
+			self.details_separator.set_title(f' {human_readable_size(sum([self.unarchive_path(x)[0].lstat().st_size for x in self.tagged_files if not stat.S_ISDIR(self.unarchive_path(x)[0].lstat().st_mode)]))} in {len(self.tagged_files)} file{("s" if len(self.tagged_files) != 1 else "")} ')
 			self.details_separator.set_title_attr('marked')
 		else:
 			self.details_separator.set_title('─')

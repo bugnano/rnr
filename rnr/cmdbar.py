@@ -52,6 +52,7 @@ class CmdBar(urwid.WidgetWrap):
 		self.file = None
 		self.callback = None
 		self.forced_focus = False
+		self.unarchive_path = controller.unarchive_path
 
 		self.edit = CmdEdit()
 
@@ -144,9 +145,9 @@ class CmdBar(urwid.WidgetWrap):
 			pass
 
 		if new_dir.is_absolute():
-			new_dir = Path(os.path.normpath(new_dir))
+			new_dir = self.unarchive_path(new_dir)[0]
 		else:
-			new_dir = Path(os.path.normpath(self.file / new_dir))
+			new_dir = self.unarchive_path(self.file / new_dir)[0]
 
 		try:
 			os.makedirs(new_dir, exist_ok=True)
@@ -163,9 +164,9 @@ class CmdBar(urwid.WidgetWrap):
 		elif mode == 'insert':
 			edit_pos = 0
 		elif mode == 'append_before':
-			edit_pos = len(tar_stem(file).replace('%', '%%'))
+			edit_pos = len(tar_stem(text))
 		elif mode == 'replace_before':
-			text = tar_suffix(file).replace('%', '%%')
+			text = tar_suffix(text)
 			edit_pos = 0
 		else:
 			edit_pos = -1
@@ -184,21 +185,24 @@ class CmdBar(urwid.WidgetWrap):
 		else:
 			new_name = Path(os.path.normpath(self.file.parent / new_name))
 
+		unarchive_new_name = self.unarchive_path(new_name)[0]
+
 		try:
-			if os.path.lexists(new_name):
-				if new_name.is_dir():
-					if new_name.resolve() == self.file.parent.resolve():
+			if os.path.lexists(unarchive_new_name):
+				if unarchive_new_name.is_dir():
+					if unarchive_new_name.resolve() == self.unarchive_path(self.file.parent)[0].resolve():
 						return
 
 					new_name = new_name / self.file.name
 				else:
-					if (new_name.parent.resolve() / new_name.name) == (self.file.parent.resolve() / self.file.name):
+					if (self.unarchive_path(new_name.parent)[0].resolve() / new_name.name) == (self.unarchive_path(self.file.parent)[0].resolve() / self.file.name):
 						return
 
 					self.screen.error(f'File already exists')
 					return
 
-			self.file.rename(new_name)
+			self.controller.umount_archive(self.file)
+			self.unarchive_path(self.file)[0].rename(self.unarchive_path(new_name)[0])
 			self.controller.reload(new_name, old_focus=self.file)
 		except OSError as e:
 			self.screen.error(f'{e.strerror} ({e.errno})')
@@ -219,12 +223,12 @@ class CmdBar(urwid.WidgetWrap):
 		self.prepare_action('shell', 'shell: ', '')
 
 	def do_shell(self):
-		cwd = str(self.screen.center.focus.cwd)
+		cwd = self.unarchive_path(self.screen.center.focus.cwd)[0]
 
 		self.controller.loop.stop()
 		prompt = ('$' if os.geteuid() else '#')
 		cmd = apply_template(self.edit.get_edit_text(), self.screen)
-		print(f'[{cwd}]{prompt} {cmd}')
+		print(f'[{str(cwd)}]{prompt} {cmd}')
 		subprocess.run(cmd, shell=True, cwd=cwd)
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
@@ -245,9 +249,9 @@ class CmdBar(urwid.WidgetWrap):
 			pass
 
 		if file.is_absolute():
-			file = Path(os.path.normpath(file))
+			file = self.unarchive_path(file)[0]
 		else:
-			file = Path(os.path.normpath(self.file.parent / file))
+			file = self.unarchive_path(self.file.parent / file)[0]
 
 		self.file = file
 

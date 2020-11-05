@@ -768,7 +768,7 @@ class App(object):
 		self.loop._unhandled_input = self.keypress
 
 	def unarchive_path(self, file):
-		file = Path(file)
+		file = Path(os.path.normpath(file))
 
 		for archive_file, temp_dir, panels in reversed(self.archive_dirs):
 			if (file == archive_file) or (archive_file in file.parents):
@@ -812,6 +812,13 @@ class App(object):
 				os.rmdir(temp_dir)
 			except OSError:
 				pass
+
+	def umount_archive(self, file):
+		if file in self.screen.left.cwd.parents:
+			self.screen.left.chdir(file.parent)
+
+		if file in self.screen.right.cwd.parents:
+			self.screen.right.chdir(file.parent)
 
 	def quit(self):
 		cwd = self.screen.center.focus.cwd

@@ -536,7 +536,8 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_dirscan, args=(files, cwd, fd, q, self.ev_interrupt, ev_abort, ev_skip)).start()
+		files = [self.unarchive_path(x, include_self=False)[0] for x in files]
+		Thread(target=rnr_dirscan, args=(files, cwd, fd, q, self.ev_interrupt, ev_abort, ev_skip, self.archive_path)).start()
 
 	def on_finish(self, completed_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id):
 		warnings = [x for x in completed_list if x['message']]
@@ -558,6 +559,10 @@ class App(object):
 
 	def on_delete(self, files, cwd):
 		self.screen.close_dialog()
+
+		for file in files:
+			self.umount_archive(file)
+
 		self.do_dirscan(files, cwd, functools.partial(self.do_delete, files=files, cwd=cwd, job_id=None))
 
 	def do_delete(self, file_list, scan_error, scan_skipped, files, cwd, job_id):
@@ -584,7 +589,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, self.ev_interrupt, ev_abort, ev_nodb, self.dbfile, job_id)).start()
+		Thread(target=rnr_delete, args=(file_list, fd, q, ev_skip, ev_suspend, self.ev_interrupt, ev_abort, ev_nodb, self.dbfile, job_id, self.unarchive_path)).start()
 
 	def on_copy(self, files, cwd, dest, on_conflict):
 		self.screen.close_dialog()
@@ -767,12 +772,25 @@ class App(object):
 		self.screen.bottom.set_labels(Labels)
 		self.loop._unhandled_input = self.keypress
 
-	def unarchive_path(self, file):
+	def unarchive_path(self, file, include_self=True):
 		file = Path(os.path.normpath(file))
 
 		for archive_file, temp_dir, panels in reversed(self.archive_dirs):
-			if (file == archive_file) or (archive_file in file.parents):
+			if (include_self and (file == archive_file)) or (archive_file in file.parents):
 				file = Path(str(file).replace(str(archive_file), str(temp_dir), 1))
+				break
+		else:
+			archive_file = None
+			temp_dir = None
+
+		return (file, archive_file, temp_dir)
+
+	def archive_path(self, file, include_self=True):
+		file = Path(os.path.normpath(file))
+
+		for archive_file, temp_dir, panels in self.archive_dirs:
+			if (include_self and (file == temp_dir)) or (temp_dir in file.parents):
+				file = Path(str(file).replace(str(temp_dir), str(archive_file), 1))
 				break
 		else:
 			archive_file = None

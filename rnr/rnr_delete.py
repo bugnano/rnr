@@ -29,7 +29,7 @@ from .utils import (InterruptError, AbortedError, SkippedError)
 from .debug_print import (debug_print, debug_pprint)
 
 
-def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nodb, dbfile, job_id):
+def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nodb, dbfile, job_id, unarchive_path):
 	if dbfile:
 		db = DataBase(dbfile)
 
@@ -91,12 +91,13 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nod
 				if dbfile:
 					db.set_file_status(file, 'IN_PROGRESS')
 
-				parent_dir = Path(file['file']).resolve().parent
+				actual_file = unarchive_path(file['file'])[0]
+				parent_dir = actual_file.resolve().parent
 
 				if file['is_dir']:
-					os.rmdir(file['file'])
+					os.rmdir(actual_file)
 				else:
-					os.remove(file['file'])
+					os.remove(actual_file)
 
 				parent_fd = os.open(parent_dir, 0)
 				try:

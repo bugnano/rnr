@@ -8,6 +8,7 @@ import re
 import fnmatch
 import argparse
 import functools
+import signal
 
 from pathlib import Path
 
@@ -1256,6 +1257,11 @@ def keypress(controller, key):
 			controller.close_viewer(key)
 		except AttributeError:
 			raise urwid.ExitMainLoop()
+	elif key == 'ctrl o':
+		controller.loop.stop()
+		input('Press ENTER to continue...')
+		controller.loop.start()
+		os.kill(os.getpid(), signal.SIGWINCH)
 	elif key in (':', 'f5'):
 		if controller.screen.list_box.file_size == 0:
 			return

@@ -432,11 +432,14 @@ class Panel(urwid.WidgetWrap):
 		if focus_path is None:
 			focus_path = self.cwd
 
+		old_cwd = self.old_cwd
+		self.old_cwd = self.cwd
+
 		if self._reload(cwd, focus_path):
-			self.old_cwd = self.cwd
 			self.cwd = cwd
 			return True
 		else:
+			self.old_cwd = old_cwd
 			self.title.set_title(f' {str(self.cwd)} ')
 			return False
 
@@ -484,7 +487,7 @@ class Panel(urwid.WidgetWrap):
 			return False
 
 		self.show_preview(None)
-		self.controller.update_archive_dirs(cwd, self)
+		self.controller.update_archive_dirs(cwd, self.old_cwd, self)
 
 		self.files = files
 		self.apply_hidden(self.show_hidden)

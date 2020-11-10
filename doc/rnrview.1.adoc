@@ -35,6 +35,7 @@ rnrview(1) is a text based file viewer that complements rnr(1)
 == KEY BINDINGS
 *ESC*:: Return to normal mode (like Vim)
 *q, Q, v, F3, F10*:: Exit
+*CTRL-O*:: Show console output
 *j, DOWN*:: Scroll down a line
 *k, UP*:: Scroll up a line
 *g, HOME*:: Go to the top of the file

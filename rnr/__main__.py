@@ -331,8 +331,11 @@ class App(object):
 				self.leader = key
 				self.screen.command_bar.set_leader(self.leader)
 			elif key == 'm':
-				self.leader = key
-				self.screen.command_bar.set_leader(self.leader)
+				if self.unarchive_path(self.screen.center.focus.cwd)[1] is not None:
+					self.screen.error(f'Cannot bookmark inside an archive')
+				else:
+					self.leader = key
+					self.screen.command_bar.set_leader(self.leader)
 			elif key in ('`', "'"):
 				self.leader = key
 				self.screen.command_bar.set_leader(self.leader)
@@ -822,11 +825,11 @@ class App(object):
 			self.archive_dirs.append((archive_file, temp_dir, {panel}))
 			self.archive_dirs.sort(key=lambda x: str(x[0]).replace(os.sep, '\0'))
 
-	def update_archive_dirs(self, cwd, panel):
+	def update_archive_dirs(self, cwd, old_cwd, panel):
 		i_umount = []
 		last_index = len(self.archive_dirs) - 1
 		for i, (archive_file, temp_dir, panels) in enumerate(reversed(self.archive_dirs)):
-			if (cwd == archive_file) or (archive_file in cwd.parents):
+			if (cwd == archive_file) or (archive_file in cwd.parents) or (old_cwd == archive_file) or (archive_file in old_cwd.parents):
 				panels.add(panel)
 			else:
 				panels.discard(panel)
@@ -847,11 +850,19 @@ class App(object):
 				pass
 
 	def umount_archive(self, file):
-		if file in self.screen.left.cwd.parents:
+		if (file == self.screen.left.cwd) or (file in self.screen.left.cwd.parents):
 			self.screen.left.chdir(file.parent)
 
-		if file in self.screen.right.cwd.parents:
+		if (file == self.screen.left.old_cwd) or (file in self.screen.left.old_cwd.parents):
+			self.screen.left.old_cwd = file.parent
+			self.update_archive_dirs(self.screen.left.cwd, self.screen.left.old_cwd, self.screen.left)
+
+		if (file == self.screen.right.cwd) or (file in self.screen.right.cwd.parents):
 			self.screen.right.chdir(file.parent)
+
+		if (file == self.screen.right.old_cwd) or (file in self.screen.right.old_cwd.parents):
+			self.screen.right.old_cwd = file.parent
+			self.update_archive_dirs(self.screen.right.cwd, self.screen.right.old_cwd, self.screen.right)
 
 	def quit(self):
 		cwd = self.screen.center.focus.cwd
@@ -864,8 +875,8 @@ class App(object):
 
 		self.screen.left.show_preview(None)
 		self.screen.right.show_preview(None)
-		self.update_archive_dirs(cwd, self.screen.left)
-		self.update_archive_dirs(cwd, self.screen.right)
+		self.update_archive_dirs(cwd, cwd, self.screen.left)
+		self.update_archive_dirs(cwd, cwd, self.screen.right)
 
 		if self.printwd:
 			try:

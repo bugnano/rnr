@@ -185,7 +185,7 @@ class CmdBar(urwid.WidgetWrap):
 		else:
 			new_name = Path(os.path.normpath(self.file.parent / new_name))
 
-		unarchive_new_name = self.unarchive_path(new_name)[0]
+		unarchive_new_name = self.unarchive_path(new_name, include_self=False)[0]
 
 		try:
 			if os.path.lexists(unarchive_new_name):

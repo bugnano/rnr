@@ -604,25 +604,28 @@ class App(object):
 		if not path_dest.is_absolute():
 			path_dest = Path(os.path.normpath(path_cwd / path_dest))
 
+		unarchive_cwd = self.unarchive_path(path_cwd)[0]
+		unarchive_dest = self.unarchive_path(path_dest)[0]
+
 		try:
 			if len(files) == 1:
-				if path_dest.is_dir():
-					if (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
+				if unarchive_dest.is_dir():
+					if (unarchive_cwd.resolve() == unarchive_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 						pass
 					else:
 						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 				else:
 					dest_parent = path_dest.parent
-					if not dest_parent.is_dir():
+					if not self.unarchive_path(dest_parent)[0].is_dir():
 						self.screen.error(f'{str(Path(dest).parent)} is not a directory')
-					elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
+					elif (unarchive_cwd.resolve() == unarchive_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 						pass
 					else:
 						self.do_dirscan(files, cwd, functools.partial(self.do_copy, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 			else:
-				if not path_dest.is_dir():
+				if not unarchive_dest.is_dir():
 					self.screen.error(f'{dest} is not a directory')
-				elif (path_cwd.resolve() == path_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
+				elif (unarchive_cwd.resolve() == unarchive_dest.resolve()) and (on_conflict in ('overwrite', 'skip')):
 					pass
 				else:
 					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, files=files, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
@@ -653,7 +656,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, self.ev_interrupt, ev_abort, ev_nodb, self.dbfile, job_id)).start()
+		Thread(target=rnr_cpmv, args=('cp', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, self.ev_interrupt, ev_abort, ev_nodb, self.dbfile, job_id, self.unarchive_path)).start()
 
 	def on_move(self, files, cwd, dest, on_conflict):
 		self.screen.close_dialog()
@@ -668,27 +671,39 @@ class App(object):
 		if not path_dest.is_absolute():
 			path_dest = Path(os.path.normpath(path_cwd / path_dest))
 
+		unarchive_cwd = self.unarchive_path(path_cwd)[0]
+		unarchive_dest = self.unarchive_path(path_dest)[0]
+
 		try:
 			if len(files) == 1:
-				if path_dest.is_dir():
-					if path_cwd.resolve() == path_dest.resolve():
+				if unarchive_dest.is_dir():
+					if unarchive_cwd.resolve() == unarchive_dest.resolve():
 						pass
 					else:
+						for file in files:
+							self.umount_archive(file)
+
 						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 				else:
 					dest_parent = path_dest.parent
-					if not dest_parent.is_dir():
+					if not self.unarchive_path(dest_parent)[0].is_dir():
 						self.screen.error(f'{str(Path(dest).parent)} is not a directory')
-					elif path_cwd.resolve() == path_dest.resolve():
+					elif unarchive_cwd.resolve() == unarchive_dest.resolve():
 						pass
 					else:
+						for file in files:
+							self.umount_archive(file)
+
 						self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 			else:
-				if not path_dest.is_dir():
+				if not unarchive_dest.is_dir():
 					self.screen.error(f'{dest} is not a directory')
-				elif path_cwd.resolve() == path_dest.resolve():
+				elif unarchive_cwd.resolve() == unarchive_dest.resolve():
 					pass
 				else:
+					for file in files:
+						self.umount_archive(file)
+
 					self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
 		except (FileNotFoundError, PermissionError) as e:
 			self.screen.error(f'{e.strerror} ({e.errno})')
@@ -717,7 +732,7 @@ class App(object):
 		fd = self.loop.watch_pipe(dlg.on_pipe_data)
 		dlg.fd = fd
 
-		Thread(target=rnr_cpmv, args=('mv', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, self.ev_interrupt, ev_abort, ev_nodb, self.dbfile, job_id)).start()
+		Thread(target=rnr_cpmv, args=('mv', file_list, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, self.ev_interrupt, ev_abort, ev_nodb, self.dbfile, job_id, self.unarchive_path)).start()
 
 	def check_pending_jobs(self):
 		if not self.dbfile:

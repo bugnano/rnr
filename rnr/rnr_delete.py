@@ -91,7 +91,7 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nod
 				if dbfile:
 					db.set_file_status(file, 'IN_PROGRESS')
 
-				actual_file = unarchive_path(file['file'])[0]
+				actual_file = unarchive_path(file['file'], include_self=False)[0]
 				parent_dir = actual_file.resolve().parent
 
 				if file['is_dir']:

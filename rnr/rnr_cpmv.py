@@ -102,7 +102,7 @@ def rnr_copyfile(cur_file, cur_target, file_size, block_size, resume, info, time
 		finally:
 			os.close(target_fd)
 
-def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nodb, dbfile, job_id):
+def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nodb, dbfile, job_id, unarchive_path):
 	if dbfile:
 		db = DataBase(dbfile)
 
@@ -113,10 +113,11 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 	aborted_list = []
 
 	dest = Path(dest)
+	actual_dest = unarchive_path(dest)[0]
 
 	default_block_size = 2 ** 23
 	try:
-		fs_block_size = dest.lstat().st_blksize
+		fs_block_size = actual_dest.lstat().st_blksize
 		block_size = max(fs_block_size, default_block_size + ((fs_block_size - default_block_size) % fs_block_size))
 	except (OSError, AttributeError):
 		block_size = default_block_size
@@ -146,7 +147,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 		replace_first_path = None
 
 	if replace_first_path is None:
-		if dest.is_dir():
+		if actual_dest.is_dir():
 			replace_first_path = False
 		else:
 			replace_first_path = True
@@ -187,6 +188,9 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 			else:
 				cur_target = dest / rel_file
 
+			actual_file = unarchive_path(cur_file, include_self=False)[0]
+			actual_target = unarchive_path(cur_target, include_self=False)[0]
+
 			skip_dir_stack_changed = False
 			skip_dir = False
 			while skip_dir_stack:
@@ -207,6 +211,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				(old_target, new_target) = rename_dir_stack[-1]
 				if old_target in cur_target.parents:
 					cur_target = Path(str(cur_target).replace(str(old_target), str(new_target), 1))
+					actual_target = unarchive_path(cur_target, include_self=False)[0]
 					break
 				else:
 					rename_dir_stack.pop()
@@ -222,8 +227,9 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 					x = file.get('cur_target', None)
 					if x is not None:
 						cur_target = Path(x)
+						actual_target = unarchive_path(cur_target, include_self=False)[0]
 
-					if os.path.lexists(cur_target):
+					if os.path.lexists(actual_target):
 						resume = True
 
 						if warning:
@@ -234,50 +240,52 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 						file['warning'] = warning
 				else:
-					if os.path.lexists(cur_target) and not skip_dir:
+					if os.path.lexists(actual_target) and not skip_dir:
 						when = 'stat_target'
-						target_is_dir = cur_target.is_dir()
-						target_is_symlink = cur_target.is_symlink()
+						target_is_dir = actual_target.is_dir()
+						target_is_symlink = actual_target.is_symlink()
 
 						if not (file['is_dir'] and target_is_dir):
 							when = 'samefile'
-							if cur_file.resolve() == cur_target.resolve():
+							if actual_file.resolve() == actual_target.resolve():
 								if (mode == 'mv') or (on_conflict not in ('rename_existing', 'rename_copy')):
 									raise SkippedError('Same file')
 
 							if on_conflict == 'overwrite':
 								if target_is_dir and not target_is_symlink:
 									when = 'rmdir'
-									os.rmdir(cur_target)
+									os.rmdir(actual_target)
 									warning = f'Overwrite'
 								else:
 									when = 'remove'
-									os.remove(cur_target)
+									os.remove(actual_target)
 									warning = f'Overwrite'
 							elif on_conflict == 'rename_existing':
 								i = 0
-								name = cur_target.name
-								existing_target = cur_target
+								name = actual_target.name
+								existing_target = actual_target
 								while os.path.lexists(existing_target):
 									new_name = f'{name}.rnrsave{i}'
 									existing_target = existing_target.parent / new_name
 									i += 1
 
 								when = 'samefile'
-								if cur_file.resolve() == cur_target.resolve():
-									cur_file = existing_target
+								if actual_file.resolve() == actual_target.resolve():
+									actual_file = existing_target
 
 								when = 'rename'
-								os.rename(cur_target, existing_target)
+								os.rename(actual_target, existing_target)
 								warning = f'Renamed to {existing_target.name}'
 							elif on_conflict == 'rename_copy':
 								i = 0
 								name = cur_target.name
 								existing_target = cur_target
-								while os.path.lexists(cur_target):
+								while os.path.lexists(unarchive_path(cur_target)[0]):
 									new_name = f'{name}.rnrnew{i}'
 									cur_target = cur_target.parent / new_name
 									i += 1
+
+								actual_target = unarchive_path(cur_target)[0]
 
 								warning = f'Renamed to {cur_target.name}'
 								if file['is_dir']:
@@ -324,12 +332,12 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				if skip_dir:
 					raise SkippedError('no_log')
 
-				parent_dir = cur_target.resolve().parent
+				parent_dir = actual_target.resolve().parent
 
 				if (mode == 'mv') and not target_is_dir:
 					perform_copy = False
 					try:
-						os.rename(cur_file, cur_target)
+						os.rename(actual_file, actual_target)
 						if file['is_dir']:
 							skip_dir_stack.append(cur_file)
 							if dbfile:
@@ -344,12 +352,12 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				if perform_copy:
 					if file['is_symlink']:
 						when = 'symlink'
-						os.symlink(os.readlink(cur_file), cur_target)
+						os.symlink(os.readlink(actual_file), actual_target)
 					elif file['is_dir']:
 						new_dir = False
 						if not target_is_dir:
 							when = 'makedirs'
-							os.makedirs(cur_target, exist_ok=True)
+							os.makedirs(actual_target, exist_ok=True)
 							new_dir = True
 
 						dir_list.append({'file': file, 'cur_file': cur_file, 'cur_target': cur_target, 'new_dir': new_dir})
@@ -357,7 +365,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 							db.set_dir_list(job_id, dir_list)
 					elif file['is_file']:
 						when = 'copyfile'
-						rnr_copyfile(cur_file, cur_target, file['lstat'].st_size, block_size, resume, info, timers, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort)
+						rnr_copyfile(actual_file, actual_target, file['lstat'].st_size, block_size, resume, info, timers, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort)
 					else:
 						in_error = True
 						message = f'Special file'
@@ -369,11 +377,11 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 						if not file['is_dir']:
 							when = 'lchown'
 							try:
-								os.lchown(cur_target, file['lstat'].st_uid, file['lstat'].st_gid)
+								os.lchown(actual_target, file['lstat'].st_uid, file['lstat'].st_gid)
 							except OSError as e:
 								if e.errno == errno.EPERM:
 									try:
-										os.lchown(cur_target, -1, file['lstat'].st_gid)
+										os.lchown(actual_target, -1, file['lstat'].st_gid)
 									except OSError as e:
 										if e.errno in (errno.EPERM, errno.ENOSYS):
 											pass
@@ -385,7 +393,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 									raise
 
 							when = 'copystat'
-							shutil.copystat(cur_file, cur_target, follow_symlinks=False)
+							shutil.copystat(actual_file, actual_target, follow_symlinks=False)
 
 						when = 'fsync'
 						parent_fd = os.open(parent_dir, 0)
@@ -397,10 +405,10 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				if (mode == 'mv') and not file['is_dir']:
 					if perform_copy:
 						when = 'remove'
-						os.remove(cur_file)
+						os.remove(actual_file)
 
 					when = 'fsync'
-					parent_fd = os.open(cur_file.parent, 0)
+					parent_fd = os.open(actual_file.parent, 0)
 					try:
 						os.fsync(parent_fd)
 					finally:
@@ -419,7 +427,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 			break
 		except AbortedError as e:
 			try:
-				os.remove(cur_target)
+				os.remove(actual_target)
 			except OSError:
 				pass
 
@@ -443,7 +451,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 				if message == 'ev_skip':
 					message = ''
 					try:
-						os.remove(cur_target)
+						os.remove(actual_target)
 					except OSError:
 						pass
 
@@ -490,6 +498,9 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 			info['cur_size'] = file['lstat'].st_size
 			info['cur_bytes'] = 0
 
+			actual_file = unarchive_path(cur_file, include_self=False)[0]
+			actual_target = unarchive_path(cur_target, include_self=False)[0]
+
 			now = time.monotonic()
 			if (now - timers['last_write']) > 0.05:
 				timers['last_write'] = now
@@ -503,16 +514,16 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 			when = ''
 			try:
-				parent_dir = cur_target.resolve().parent
+				parent_dir = actual_target.resolve().parent
 
 				if entry['new_dir']:
 					when = 'lchown'
 					try:
-						os.lchown(cur_target, file['lstat'].st_uid, file['lstat'].st_gid)
+						os.lchown(actual_target, file['lstat'].st_uid, file['lstat'].st_gid)
 					except OSError as e:
 						if e.errno == errno.EPERM:
 							try:
-								os.lchown(cur_target, -1, file['lstat'].st_gid)
+								os.lchown(actual_target, -1, file['lstat'].st_gid)
 							except OSError as e:
 								if e.errno in (errno.EPERM, errno.ENOSYS):
 									pass
@@ -524,7 +535,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 							raise
 
 					when = 'copystat'
-					shutil.copystat(cur_file, cur_target, follow_symlinks=False)
+					shutil.copystat(actual_file, actual_target, follow_symlinks=False)
 
 				when = 'fsync'
 				parent_fd = os.open(parent_dir, 0)
@@ -535,10 +546,10 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 
 				if mode == 'mv':
 					when = 'rmdir'
-					os.rmdir(cur_file)
+					os.rmdir(actual_file)
 
 					when = 'fsync'
-					parent_fd = os.open(cur_file.parent, 0)
+					parent_fd = os.open(actual_file.parent, 0)
 					try:
 						os.fsync(parent_fd)
 					finally:

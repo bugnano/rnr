@@ -25,6 +25,7 @@ import subprocess
 import stat
 import signal
 import functools
+import tempfile
 
 from pathlib import Path
 from queue import Queue
@@ -101,6 +102,7 @@ class Screen(urwid.WidgetWrap):
 
 		self.show_preview = False
 		self.in_error = False
+		self.error_cb = None
 
 		super().__init__(self.pile)
 
@@ -127,7 +129,12 @@ class Screen(urwid.WidgetWrap):
 
 		self.in_error = False
 
-	def error(self, e, title='Error', error=True):
+		error_cb = self.error_cb
+		self.error_cb = None
+		if error_cb:
+			error_cb()
+
+	def error(self, e, title='Error', error=True, callback=None):
 		try:
 			self.center.focus.force_focus()
 		except AttributeError:
@@ -139,6 +146,8 @@ class Screen(urwid.WidgetWrap):
 		), self.pile.options())
 
 		self.in_error = True
+
+		self.error_cb = callback
 
 	def open_cancelable(self, title, message, on_cancel):
 		try:
@@ -178,6 +187,15 @@ class App(object):
 		self.use_internal_viewer = USE_INTERNAL_VIEWER
 
 		self.archive_dirs = []
+		self.archives = []
+		self.archive_file = None
+		self.archive_panel = None
+		self.archive_cb = None
+		self.archive_cancel_cb = None
+		self.archive_error_cb = None
+		self.archivemount_proc = None
+		self.archivemount_alarm_handle = None
+
 		self.old_screen = None
 		self.loop = None
 		self.screen = Screen(self)
@@ -573,7 +591,8 @@ class App(object):
 
 		if self.dbfile and (job_id is None):
 			db = DataBase(self.dbfile)
-			job_id = db.new_job('Delete', file_list, scan_error, scan_skipped, files, cwd)
+			archives = [str(x[0]) for x in self.archive_dirs]
+			job_id = db.new_job('Delete', file_list, scan_error, scan_skipped, files, cwd, archives=archives)
 			del db
 
 		q = Queue()
@@ -640,7 +659,8 @@ class App(object):
 
 		if self.dbfile and (job_id is None):
 			db = DataBase(self.dbfile)
-			job_id = db.new_job('Copy', file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict)
+			archives = [str(x[0]) for x in self.archive_dirs]
+			job_id = db.new_job('Copy', file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, archives=archives)
 			del db
 
 		q = Queue()
@@ -716,7 +736,8 @@ class App(object):
 
 		if self.dbfile and (job_id is None):
 			db = DataBase(self.dbfile)
-			job_id = db.new_job('Move', file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict)
+			archives = [str(x[0]) for x in self.archive_dirs]
+			job_id = db.new_job('Move', file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, archives=archives)
 			del db
 
 		q = Queue()
@@ -863,6 +884,110 @@ class App(object):
 		if (file == self.screen.right.old_cwd) or (file in self.screen.right.old_cwd.parents):
 			self.screen.right.old_cwd = file.parent
 			self.update_archive_dirs(self.screen.right.cwd, self.screen.right.old_cwd, self.screen.right)
+
+	def mount_archives(self, archives, callback, cancel_cb=None, error_cb=None):
+		self.archives.extend(archives)
+		if self.archives:
+			self.mount_next_archive(callback, cancel_cb, error_cb)
+		else:
+			callback()
+
+	def mount_next_archive(self, final_cb, cancel_cb=None, error_cb=None):
+		archive = self.archives.pop(0)
+		if self.archives:
+			callback = lambda: self.mount_next_archive(final_cb, cancel_cb, error_cb)
+		else:
+			callback = final_cb
+
+		self.mount_archive(archive, self.screen.center.focus, callback, cancel_cb, error_cb)
+
+	def mount_archive(self, archive, panel, callback, cancel_cb=None, error_cb=None, show_error=True):
+		archive = Path(archive)
+
+		self.archivemount_alarm_handle = None
+
+		(file, archive_file, temp_dir) = self.unarchive_path(archive)
+		if archive == archive_file:
+			callback()
+			return
+
+		self.archive_file = archive
+		self.archive_panel = panel
+		self.archive_cb = callback
+		self.archive_cancel_cb = cancel_cb
+		self.archive_error_cb = error_cb
+
+		self.temp_dir = Path(tempfile.mkdtemp())
+		try:
+			self.archivemount_proc = subprocess.Popen(['archivemount', '-o', 'ro', self.archive_file.name, str(self.temp_dir)], cwd=self.unarchive_path(self.archive_file.parent)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+			try:
+				self.archivemount_proc.communicate(timeout=0.05)
+			except subprocess.TimeoutExpired:
+				self.screen.open_cancelable('archivemount', 'Opening archive...', self.on_cancel_archivemount)
+
+			self.archivemount_alarm_cb()
+		except FileNotFoundError:
+			try:
+				os.rmdir(self.temp_dir)
+			except OSError:
+				pass
+
+			if show_error:
+				self.screen.error('archivemount executable not found', callback=self.archive_error_cb)
+			else:
+				if self.archive_error_cb:
+					self.archive_error_cb()
+
+	def on_cancel_archivemount(self):
+		self.screen.close_dialog()
+		self.loop.remove_alarm(self.archivemount_alarm_handle)
+
+		self.archivemount_proc.terminate()
+		while self.archivemount_proc.poll() is None:
+			pass
+
+		try:
+			umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.unarchive_path(self.archive_file.parent)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+		except FileNotFoundError:
+			pass
+
+		try:
+			os.rmdir(self.temp_dir)
+		except OSError:
+			pass
+
+		self.archivemount_proc = None
+		self.archivemount_alarm_handle = None
+
+		if self.archive_cancel_cb:
+			self.archive_cancel_cb()
+
+	def archivemount_alarm_cb(self, loop=None, user_data=None):
+		if self.archivemount_proc.poll() is None:
+			self.archivemount_alarm_handle = self.loop.set_alarm_in(0.05, self.archivemount_alarm_cb)
+		else:
+			self.screen.close_dialog()
+
+			if self.archivemount_proc.returncode != 0:
+				try:
+					umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.unarchive_path(self.archive_file.parent)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+				except FileNotFoundError:
+					pass
+
+				try:
+					os.rmdir(self.temp_dir)
+				except OSError:
+					pass
+
+				(stdout_data, stderr_data) = self.archivemount_proc.communicate()
+				self.screen.error(stderr_data.strip(), callback=self.archive_error_cb)
+			else:
+				self.add_archive_dir(self.archive_file, self.temp_dir, self.archive_panel)
+				self.archive_cb()
+
+			self.archivemount_proc = None
+			self.archivemount_alarm_handle = None
 
 	def quit(self):
 		cwd = self.screen.center.focus.cwd

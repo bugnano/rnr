@@ -138,17 +138,21 @@ class DlgPendingJob(urwid.WidgetWrap):
 
 			self.controller.on_finish(completed_list, error_list, skipped_list, aborted_list, operation, files, cwd, dest, scan_error, scan_skipped, job_id)
 		else:
-			if operation == 'Delete':
-				self.controller.do_delete(file_list, scan_error, scan_skipped, files, cwd, job_id)
-			elif operation == 'Copy':
-				self.controller.do_copy(file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id)
-			elif operation == 'Move':
-				self.controller.do_move(file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id)
-			else:
+			archives = json.loads(self.pending_job['archives'])
+			def error_cb():
 				if self.controller.pending_jobs:
 					self.controller.show_next_pending_job()
 				else:
 					self.controller.reload()
+
+			if operation == 'Delete':
+				self.controller.mount_archives(archives, lambda: self.controller.do_delete(file_list, scan_error, scan_skipped, files, cwd, job_id), error_cb, error_cb)
+			elif operation == 'Copy':
+				self.controller.mount_archives(archives, lambda: self.controller.do_copy(file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id), error_cb, error_cb)
+			elif operation == 'Move':
+				self.controller.mount_archives(archives, lambda: self.controller.do_move(file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id), error_cb, error_cb)
+			else:
+				error_cb()
 
 	def on_skip(self):
 		self.controller.screen.close_dialog()

@@ -27,7 +27,6 @@ import collections
 import shutil
 import subprocess
 import signal
-import tempfile
 
 from pathlib import Path
 
@@ -412,10 +411,6 @@ class Panel(urwid.WidgetWrap):
 
 		self.focused = False
 
-		self.archive_file = None
-		self.fallback_exec = None
-		self.archivemount_proc = None
-		self.archivemount_alarm_handle = None
 		self.unarchive_path = controller.unarchive_path
 
 		self.chdir(cwd)
@@ -554,83 +549,14 @@ class Panel(urwid.WidgetWrap):
 			self.filtered_files = self.shown_files[:]
 
 	def open_archive(self, file, fallback_exec=True):
-		(_, archive_file, temp_dir) = self.unarchive_path(file['file'])
-		if file['file'] == archive_file:
-			self.chdir(file['file'])
-			return
-
-		self.archive_file = file
-		self.fallback_exec = fallback_exec
-
-		self.temp_dir = Path(tempfile.mkdtemp())
-		try:
-			self.archivemount_proc = subprocess.Popen(['archivemount', '-o', 'ro', self.archive_file['file'].name, str(self.temp_dir)], cwd=self.unarchive_path(self.cwd)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-
-			try:
-				self.archivemount_proc.communicate(timeout=0.05)
-			except subprocess.TimeoutExpired:
-				self.controller.screen.open_cancelable('archivemount', 'Opening archive...', self.on_cancel_archivemount)
-
-			self.archivemount_alarm_cb()
-		except FileNotFoundError:
-			try:
-				os.rmdir(self.temp_dir)
-			except OSError:
-				pass
-
-			if self.fallback_exec:
-				self.execute(self.archive_file, open_archive=False)
-			else:
-				self.controller.screen.error('archivemount executable not found')
-
-	def on_cancel_archivemount(self):
-		self.controller.screen.close_dialog()
-		self.controller.loop.remove_alarm(self.archivemount_alarm_handle)
-
-		self.archivemount_proc.terminate()
-		while self.archivemount_proc.poll() is None:
-			pass
-
-		try:
-			umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.unarchive_path(self.cwd)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-		except FileNotFoundError:
-			pass
-
-		try:
-			os.rmdir(self.temp_dir)
-		except OSError:
-			pass
-
-		self.archivemount_proc = None
-		self.archivemount_alarm_handle = None
-
-	def archivemount_alarm_cb(self, loop=None, user_data=None):
-		if self.archivemount_proc.poll() is None:
-			self.archivemount_alarm_handle = self.controller.loop.set_alarm_in(0.05, self.archivemount_alarm_cb)
+		if fallback_exec:
+			error_cb = lambda: self.execute(file, open_archive=False)
+			show_error = False
 		else:
-			self.controller.screen.close_dialog()
+			error_cb = None
+			show_error = True
 
-			if self.archivemount_proc.returncode != 0:
-				try:
-					umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.unarchive_path(self.cwd)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-				except FileNotFoundError:
-					pass
-
-				try:
-					os.rmdir(self.temp_dir)
-				except OSError:
-					pass
-
-				(stdout_data, stderr_data) = self.archivemount_proc.communicate()
-				self.controller.screen.error(stderr_data.strip())
-				if self.fallback_exec:
-					self.execute(self.archive_file, open_archive=False)
-			else:
-				self.controller.add_archive_dir(self.archive_file['file'], self.temp_dir, self)
-				self.chdir(self.archive_file['file'])
-
-			self.archivemount_proc = None
-			self.archivemount_alarm_handle = None
+		self.controller.mount_archive(file['file'], self, lambda: self.chdir(file['file']), error_cb=error_cb, show_error=show_error)
 
 	def execute(self, file, open_archive=True):
 		if stat.S_ISDIR(file['stat'].st_mode):

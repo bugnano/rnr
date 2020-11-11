@@ -46,6 +46,7 @@ class DataBase(object):
 						cwd TEXT NOT NULL,
 						dest TEXT,
 						on_conflict TEXT,
+						archives TEXT,
 						scan_error TEXT,
 						scan_skipped TEXT,
 						dir_list TEXT,
@@ -77,7 +78,7 @@ class DataBase(object):
 		except sqlite3.OperationalError:
 			pass
 
-	def new_job(self, operation, file_list, scan_error, scan_skipped, files, cwd, dest=None, on_conflict=None):
+	def new_job(self, operation, file_list, scan_error, scan_skipped, files, cwd, dest=None, on_conflict=None, archives=None):
 		job_id = None
 
 		if self.conn is None:
@@ -89,13 +90,14 @@ class DataBase(object):
 				job_id = c.fetchone()[0] or 0
 				job_id += 1
 				c.close()
-				self.conn.execute('''INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+				self.conn.execute('''INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
 					job_id,
 					operation,
 					json.dumps([str(x) for x in files]),
 					cwd,
 					dest,
 					on_conflict,
+					json.dumps(archives),
 					json.dumps(scan_error),
 					json.dumps(scan_skipped),
 					None,

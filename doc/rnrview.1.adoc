@@ -42,9 +42,10 @@ rnrview(1) is a text based file viewer that complements rnr(1)
 *G, END*:: Go to the end of the file
 *CTRL-B, PAGE UP*:: Go up a page
 *CTRL-F, PAGE DOWN*:: Go down a page
+*w, F2*:: Toggle word wrapping
 *h, F4*:: Toggle Hex mode
 *:, F5*:: Go to line number / hex offset
-*/, ?, f, F7*:: Find in file
+*/, ?, f, F, F7*:: Find in file
 *n*:: Find next
 *N*:: Find previous
 

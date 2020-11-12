@@ -59,7 +59,7 @@ ReNewLine = re.compile(r'''(?:\r\n|[\r\n])$''')
 
 Labels = [
 	' ', #'Help',
-	' ', #'UnWrap',
+	'UnWrap',
 	'Quit',
 	'Hex', #'Ascii',
 	'Goto',
@@ -630,6 +630,7 @@ class TextFileWalker(BaseTextFileWalker):
 		self.focus = 0
 		self.search_expression = None
 		self.search_backwards = False
+		self.wrap = 'clip'
 
 		try:
 			name = self.filename.name
@@ -677,7 +678,7 @@ class TextFileWalker(BaseTextFileWalker):
 
 
 		line = self.highlight_line(self.lines[pos], 'markselect')
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap=self.wrap)], dividechars=1)
 
 		return (w, pos)
 
@@ -687,7 +688,7 @@ class TextFileWalker(BaseTextFileWalker):
 			return (None, None)
 
 		line = self.highlight_line(self.lines[pos], 'selected')
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap=self.wrap)], dividechars=1)
 
 		return (w, pos)
 
@@ -697,7 +698,7 @@ class TextFileWalker(BaseTextFileWalker):
 			return (None, None)
 
 		line = self.highlight_line(self.lines[pos], 'selected')
-		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap='clip')], dividechars=1)
+		w = urwid.Columns([(self.digits, urwid.Text(('Lineno', f'{pos+1}'), align='right')), urwid.Text(line, wrap=self.wrap)], dividechars=1)
 
 		return (w, pos)
 
@@ -721,6 +722,14 @@ class TextFileWalker(BaseTextFileWalker):
 			line = code
 
 		return super().highlight_line(line, attr)
+
+	def toggle_wrap(self):
+		if self.wrap == 'space':
+			self.wrap = 'clip'
+		else:
+			self.wrap = 'space'
+
+		self._modified()
 
 
 class TextDirectoryWalker(BaseTextFileWalker):
@@ -1175,6 +1184,12 @@ class FileViewListBox(urwid.ListBox):
 				self._invalidate()
 			except IndexError:
 				pass
+		elif key in ('w', 'f2'):
+			try:
+				self.body.toggle_wrap()
+				self._invalidate()
+			except AttributeError:
+				pass
 		else:
 			return super().keypress(size, key)
 
@@ -1275,13 +1290,16 @@ def keypress(controller, key):
 			'center', 30,
 			'middle', 'pack',
 		), controller.screen.pile.options())
-	elif key in ('/', '?', 'f', 'f7'):
+	elif key in ('/', '?', 'f', 'F', 'f7'):
 		if controller.screen.list_box.file_size == 0:
 			return
 
-		backwards = (key == '?')
+		text_file = (not controller.screen.list_box.use_hex_offset())
+		backwards = (key in ('?', 'F'))
+		use_regex = (text_file and (key in ('/', '?')))
+		use_hex = (controller.screen.list_box.body == controller.screen.list_box.hex_walker)
 
-		controller.screen.pile.contents[controller.screen.main_area] = (urwid.Overlay(DlgSearch(controller.screen, controller.screen.list_box.on_search, lambda x: controller.screen.close_dialog(), text_file=not controller.screen.list_box.use_hex_offset(), backwards=backwards), controller.screen.center,
+		controller.screen.pile.contents[controller.screen.main_area] = (urwid.Overlay(DlgSearch(controller.screen, controller.screen.list_box.on_search, lambda x: controller.screen.close_dialog(), text_file=text_file, backwards=backwards, use_regex=use_regex, use_hex=use_hex), controller.screen.center,
 			'center', 58,
 			'middle', 'pack',
 		), controller.screen.pile.options())

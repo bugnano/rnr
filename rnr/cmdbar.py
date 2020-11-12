@@ -227,7 +227,7 @@ class CmdBar(urwid.WidgetWrap):
 
 		self.controller.loop.stop()
 		prompt = ('$' if os.geteuid() else '#')
-		cmd = apply_template(self.edit.get_edit_text(), self.screen)
+		cmd = apply_template(self.edit.get_edit_text(), self.screen, unarchive_path=self.unarchive_path)
 		print(f'[{str(cwd)}]{prompt} {cmd}')
 		subprocess.run(cmd, shell=True, cwd=cwd)
 		self.controller.loop.start()

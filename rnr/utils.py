@@ -154,11 +154,14 @@ class SkippedError(Exception):
 class Template(string.Template):
 	delimiter = '%'
 
-def apply_template(text, screen, quote=True):
+def apply_template(text, screen, quote=True, unarchive_path=None):
 	if quote:
 		fn_quote = shlex.quote
 	else:
 		fn_quote = str
+
+	if unarchive_path is None:
+		unarchive_path = lambda x: (x, None, None)
 
 	cwd = str(screen.center.focus.cwd)
 
@@ -180,10 +183,8 @@ def apply_template(text, screen, quote=True):
 	else:
 		other = screen.left
 
-	other_cwd = str(other.cwd)
-
 	try:
-		other_file = fn_quote(str(other.get_focus()['file']))
+		other_file = fn_quote(str(unarchive_path(other.get_focus()['file'])[0]))
 		other_name = fn_quote(tar_stem(other.get_focus()['file']))
 		other_extension = fn_quote(tar_suffix(other.get_focus()['file']))
 	except (TypeError, AttributeError):
@@ -191,7 +192,7 @@ def apply_template(text, screen, quote=True):
 		other_name = fn_quote('')
 		other_extension = fn_quote('')
 
-	other_tagged = ' '.join([fn_quote(str(x)) for x in other.get_tagged_files()])
+	other_tagged = ' '.join([fn_quote(str(unarchive_path(x)[0])) for x in other.get_tagged_files()])
 	if not current_tagged:
 		other_tagged = fn_quote('')
 
@@ -200,15 +201,15 @@ def apply_template(text, screen, quote=True):
 		'f': current_file,
 		'n': current_name,
 		'e': current_extension,
-		'd': fn_quote(cwd),
+		'd': fn_quote(str(unarchive_path(cwd)[0])),
 		'b': fn_quote(Path(cwd).name),
 		's': current_tagged,
 		't': current_tagged,
 		'F': other_file,
 		'N': other_name,
 		'E': other_extension,
-		'D': fn_quote(other_cwd),
-		'B': fn_quote(Path(other_cwd).name),
+		'D': fn_quote(str(unarchive_path(other.cwd)[0])),
+		'B': fn_quote(Path(other.cwd).name),
 		'S': other_tagged,
 		'T': other_tagged,
 	}

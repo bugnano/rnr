@@ -27,7 +27,7 @@ from .utils import TildeLayout
 
 
 class DlgSearch(urwid.WidgetWrap):
-	def __init__(self, screen, on_ok, on_cancel, text_file=True, backwards=False):
+	def __init__(self, screen, on_ok, on_cancel, text_file=True, backwards=False, use_regex=False, use_hex=False):
 		self.screen = screen
 		self.on_ok = on_ok
 		self.on_cancel = on_cancel
@@ -52,7 +52,14 @@ class DlgSearch(urwid.WidgetWrap):
 		attr_btn_hex = urwid.AttrMap(self.btn_hex, 'dialog', 'dialog_focus')
 		self.btn_wildcard = urwid.RadioButton(bgroup, 'Wildcard search')
 		attr_btn_wildcard = urwid.AttrMap(self.btn_wildcard, 'dialog', 'dialog_focus')
-		self.btn_normal.set_state(True)
+
+		if text_file and use_regex:
+			self.btn_regex.set_state(True)
+		else:
+			self.btn_normal.set_state(True)
+
+		self.btn_hex.set_state(use_hex)
+
 		if text_file:
 			w = urwid.SimpleFocusListWalker([
 				attr_btn_normal,

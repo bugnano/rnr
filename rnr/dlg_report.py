@@ -111,6 +111,17 @@ class DlgReport(urwid.WidgetWrap):
 		elif key in ('G', 'end'):
 			self.listbox.keypress(size, 'end')
 
+	def mouse_event(self, size, event, button, col, row, focus):
+		super().mouse_event(size, event, button, col, row, focus)
+
+		if 'press' not in event.split():
+			return
+
+		if button == 4:
+			self.keypress(size, 'up')
+		elif button == 5:
+			self.keypress(size, 'down')
+
 	def on_close(self):
 		if self.controller.dbfile:
 			db = DataBase(self.controller.dbfile)

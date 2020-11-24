@@ -27,6 +27,10 @@ from pathlib import Path
 from .debug_print import (debug_print, debug_pprint)
 
 
+DB_SIGNATURE = 'rnr'
+DB_VERSION = '1'
+
+
 class DataBase(object):
 	def __init__(self, file):
 		self.conn = None
@@ -34,38 +38,29 @@ class DataBase(object):
 		try:
 			self.conn = sqlite3.connect(file)
 			self.conn.row_factory = sqlite3.Row
+			self.create_database()
 
 			with self.conn:
-				self.conn.executescript('''
-					PRAGMA foreign_keys = ON;
+				c = self.conn.execute('''SELECT v FROM misc WHERE k = ?''', ('signature', ))
+				signature = c.fetchone()[0]
 
-					CREATE TABLE IF NOT EXISTS jobs (
-						id INTEGER NOT NULL PRIMARY KEY,
-						operation TEXT NOT NULL,
-						files TEXT NOT NULL,
-						cwd TEXT NOT NULL,
-						dest TEXT,
-						on_conflict TEXT,
-						archives TEXT,
-						scan_error TEXT,
-						scan_skipped TEXT,
-						dir_list TEXT,
-						rename_dir_stack TEXT,
-						skip_dir_stack TEXT,
-						replace_first_path INTEGER,
-						status TEXT NOT NULL
-					);
+			if signature == DB_SIGNATURE:
+				with self.conn:
+					c = self.conn.execute('''SELECT v FROM misc WHERE k = ?''', ('version', ))
+					version = c.fetchone()[0]
 
-					CREATE TABLE IF NOT EXISTS files (
-						id INTEGER NOT NULL PRIMARY KEY,
-						job_id INTEGER NOT NULL,
-						file TEXT NOT NULL,
-						status TEXT NOT NULL,
-						message TEXT,
-						FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
-					);
-				''')
-		except sqlite3.OperationalError:
+				if version != DB_VERSION:
+					self.conn.close()
+					self.conn = None
+
+					os.remove(file)
+
+					self.conn = sqlite3.connect(file)
+					self.conn.row_factory = sqlite3.Row
+					self.create_database()
+			else:
+				self.conn = None
+		except (OSError, sqlite3.OperationalError):
 			pass
 
 	def __del__(self):
@@ -77,6 +72,46 @@ class DataBase(object):
 			self.conn.close()
 		except sqlite3.OperationalError:
 			pass
+
+	def create_database(self):
+		with self.conn:
+			self.conn.executescript(f'''
+				PRAGMA foreign_keys = ON;
+
+				CREATE TABLE IF NOT EXISTS jobs (
+					id INTEGER NOT NULL PRIMARY KEY,
+					operation TEXT NOT NULL,
+					files TEXT NOT NULL,
+					cwd TEXT NOT NULL,
+					dest TEXT,
+					on_conflict TEXT,
+					archives TEXT,
+					scan_error TEXT,
+					scan_skipped TEXT,
+					dir_list TEXT,
+					rename_dir_stack TEXT,
+					skip_dir_stack TEXT,
+					replace_first_path INTEGER,
+					status TEXT NOT NULL
+				);
+
+				CREATE TABLE IF NOT EXISTS files (
+					id INTEGER NOT NULL PRIMARY KEY,
+					job_id INTEGER NOT NULL,
+					file TEXT NOT NULL,
+					status TEXT NOT NULL,
+					message TEXT,
+					FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+				);
+
+				CREATE TABLE IF NOT EXISTS misc (
+					k TEXT NOT NULL PRIMARY KEY,
+					v TEXT
+				);
+
+				INSERT OR IGNORE INTO misc (k, v) VALUES ('signature', '{DB_SIGNATURE}');
+				INSERT OR IGNORE INTO misc (k, v) VALUES ('version', '{DB_VERSION}');
+			''')
 
 	def new_job(self, operation, file_list, scan_error, scan_skipped, files, cwd, dest=None, on_conflict=None, archives=None):
 		job_id = None

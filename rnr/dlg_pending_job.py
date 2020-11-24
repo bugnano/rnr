@@ -35,7 +35,6 @@ from .debug_print import (debug_print, debug_pprint)
 class DlgPendingJob(urwid.WidgetWrap):
 	def __init__(self, controller, pending_job):
 		self.controller = controller
-		self.command_bar = controller.screen.command_bar
 		self.pending_job = pending_job
 
 		attr = 'dialog'
@@ -101,6 +100,17 @@ class DlgPendingJob(urwid.WidgetWrap):
 			self.listbox.keypress(size, 'home')
 		elif key in ('G', 'end'):
 			self.listbox.keypress(size, 'end')
+
+	def mouse_event(self, size, event, button, col, row, focus):
+		super().mouse_event(size, event, button, col, row, focus)
+
+		if 'press' not in event.split():
+			return
+
+		if button == 4:
+			self.keypress(size, 'up')
+		elif button == 5:
+			self.keypress(size, 'down')
 
 	def on_continue(self):
 		self.controller.screen.close_dialog()

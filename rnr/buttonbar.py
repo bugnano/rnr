@@ -21,9 +21,12 @@ import os
 
 import urwid
 
+from .debug_print import (debug_print, debug_pprint)
+
 
 class ButtonBar(urwid.WidgetWrap):
-	def __init__(self, labels):
+	def __init__(self, controller, labels):
+		self.controller = controller
 		self.columns = urwid.Columns([])
 		self.set_labels(labels)
 
@@ -42,4 +45,18 @@ class ButtonBar(urwid.WidgetWrap):
 
 		del self.columns.contents[:]
 		self.columns.contents.extend(widgets)
+
+	def mouse_event(self, size, event, button, col, row, focus):
+		super().mouse_event(size, event, button, col, row, focus)
+
+		if ('press' not in event.split()) or (button != 1):
+			return
+
+		column_widths = self.columns.column_widths(size, focus)
+		total_width = 0
+		for i, width in enumerate(column_widths):
+			total_width += width
+			if total_width > col:
+				self.controller.loop.process_input([f'f{((i // 2) + 1)}'])
+				break
 

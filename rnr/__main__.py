@@ -80,6 +80,7 @@ Labels = [
 
 class Screen(urwid.WidgetWrap):
 	def __init__(self, controller):
+		self.controller = controller
 		self.left = Panel(controller)
 		self.right = Panel(controller)
 		self.preview_panel = PreviewPanel(controller)
@@ -89,7 +90,7 @@ class Screen(urwid.WidgetWrap):
 		w = urwid.Filler(self.command_bar)
 		pile_widgets = [self.center, (1, w)]
 
-		self.bottom = ButtonBar(Labels)
+		self.bottom = ButtonBar(controller, Labels)
 		w = urwid.Filler(self.bottom)
 		if SHOW_BUTTONBAR:
 			pile_widgets.append((1, w))
@@ -106,8 +107,29 @@ class Screen(urwid.WidgetWrap):
 
 		super().__init__(self.pile)
 
+	def mouse_event(self, size, event, button, col, row, focus):
+		if ('press' not in event.split()) or (button != 1):
+			super().mouse_event(size, event, button, col, row, focus)
+			return
+
+		item_rows = self.pile.get_item_rows(size, focus)
+		cmdbar_row = sum(item_rows[:1])
+
+		if row != cmdbar_row:
+			self.command_bar.reset()
+
+		super().mouse_event(size, event, button, col, row, focus)
+
+		if row != cmdbar_row:
+			self.controller.update_focus()
+
 	def update_focus(self):
 		for i, e in enumerate(self.center.contents):
+			try:
+				e[0].remove_force_focus()
+			except AttributeError:
+				pass
+
 			if i == self.center.focus_position:
 				e[0].set_title_attr('reverse')
 				e[0].focused = True
@@ -200,7 +222,6 @@ class App(object):
 		self.loop = None
 		self.screen = Screen(self)
 		self.screen.update_focus()
-		self.leader = ''
 		self.ev_interrupt = Event()
 		self.suspend = set()
 		self.pending_jobs = []
@@ -244,10 +265,9 @@ class App(object):
 	def keypress(self, key):
 		if key == 'esc':
 			self.screen.command_bar.reset()
-			self.leader = ''
 			self.screen.left.filter('')
 			self.screen.right.filter('')
-		elif self.leader == 's':
+		elif self.screen.command_bar.leader == 's':
 			if key == 'n':
 				self.screen.left.sort('sort_by_name')
 				self.screen.right.sort('sort_by_name')
@@ -274,14 +294,12 @@ class App(object):
 				self.screen.right.sort('sort_by_size', reverse=True)
 
 			self.screen.command_bar.reset()
-			self.leader = ''
-		elif self.leader == 'm':
+		elif self.screen.command_bar.leader == 'm':
 			if key in BOOKMARK_KEYS:
 				self.bookmarks[key] = self.screen.center.focus.cwd
 
 			self.screen.command_bar.reset()
-			self.leader = ''
-		elif self.leader in ('`', "'"):
+		elif self.screen.command_bar.leader in ('`', "'"):
 			if key in ('`', "'"):
 				if self.screen.center.focus.old_cwd != self.screen.center.focus.cwd:
 					self.screen.center.focus.chdir(self.screen.center.focus.old_cwd)
@@ -293,18 +311,15 @@ class App(object):
 					pass
 
 			self.screen.command_bar.reset()
-			self.leader = ''
-		elif self.leader == 'u':
+		elif self.screen.command_bar.leader == 'u':
 			if key == 'v':
 				self.screen.center.focus.untag_all()
 			elif key in ('f', '/'):
 				self.screen.center.focus.filter('')
 
 			self.screen.command_bar.reset()
-			self.leader = ''
-		elif self.leader == 'c':
+		elif self.screen.command_bar.leader == 'c':
 			self.screen.command_bar.reset()
-			self.leader = ''
 			if key in ('c', 'w'):
 				obj = self.screen.center.focus.get_focus()
 				try:
@@ -323,21 +338,11 @@ class App(object):
 			elif key == 'tab':
 				if self.screen.pile.focus_position == 0:
 					self.screen.center.focus_position = (self.screen.center.focus_position + 1) % len(self.screen.center.contents)
-					self.screen.update_focus()
-					if self.screen.center.focus == self.screen.preview_panel:
-						self.focused_quickviewer = True
-						self.set_input_rnrview()
-					else:
-						self.focused_quickviewer = False
+					self.update_focus()
 			elif key == 'shift tab':
 				if self.screen.pile.focus_position == 0:
 					self.screen.center.focus_position = (self.screen.center.focus_position - 1) % len(self.screen.center.contents)
-					self.screen.update_focus()
-					if self.screen.center.focus == self.screen.preview_panel:
-						self.focused_quickviewer = True
-						self.set_input_rnrview()
-					else:
-						self.focused_quickviewer = False
+					self.update_focus()
 			elif key in ('f', '/'):
 				self.screen.command_bar.filter()
 			elif key == 'enter':
@@ -346,20 +351,16 @@ class App(object):
 				self.screen.left.toggle_hidden()
 				self.screen.right.toggle_hidden()
 			elif key == 's':
-				self.leader = key
-				self.screen.command_bar.set_leader(self.leader)
+				self.screen.command_bar.set_leader(key)
 			elif key == 'm':
 				if self.unarchive_path(self.screen.center.focus.cwd)[1] is not None:
 					self.screen.error(f'Cannot bookmark inside an archive')
 				else:
-					self.leader = key
-					self.screen.command_bar.set_leader(self.leader)
+					self.screen.command_bar.set_leader(key)
 			elif key in ('`', "'"):
-				self.leader = key
-				self.screen.command_bar.set_leader(self.leader)
+				self.screen.command_bar.set_leader(key)
 			elif key == 'u':
-				self.leader = key
-				self.screen.command_bar.set_leader(self.leader)
+				self.screen.command_bar.set_leader(key)
 			elif key == 'meta i':
 				cwd = self.screen.center.focus.cwd
 
@@ -387,7 +388,7 @@ class App(object):
 			elif key == 'ctrl u':
 				(self.screen.center.contents[0], self.screen.center.contents[1]) = (self.screen.center.contents[1], self.screen.center.contents[0])
 				self.screen.center.focus_position ^= 1
-				self.screen.update_focus()
+				self.update_focus()
 			elif key == 'ctrl o':
 				self.loop.stop()
 				input('Press ENTER to continue...')
@@ -421,13 +422,12 @@ class App(object):
 				if not self.screen.show_preview:
 					self.screen.preview_panel.clear()
 
-				self.screen.update_focus()
+				self.update_focus()
 				self.reload()
 			elif key == 'f7':
 				self.screen.command_bar.mkdir(self.screen.center.focus.cwd)
 			elif key == 'c':
-				self.leader = key
-				self.screen.command_bar.set_leader(self.leader)
+				self.screen.command_bar.set_leader(key)
 			elif key == 'r':
 				obj = self.screen.center.focus.get_focus()
 				try:
@@ -510,6 +510,15 @@ class App(object):
 						'center', ('relative', 85),
 						'middle', 'pack',
 					), self.screen.pile.options())
+
+	def update_focus(self):
+		self.screen.update_focus()
+		if self.screen.center.focus == self.screen.preview_panel:
+			self.focused_quickviewer = True
+			self.set_input_rnrview()
+		else:
+			self.focused_quickviewer = False
+			self.set_input_rnr()
 
 	def reload(self, focus_path=None, old_focus=None, only_focused=False):
 		if old_focus is None:

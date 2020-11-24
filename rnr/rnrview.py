@@ -1193,6 +1193,17 @@ class FileViewListBox(urwid.ListBox):
 		else:
 			return super().keypress(size, key)
 
+	def mouse_event(self, size, event, button, col, row, focus):
+		super().mouse_event(size, event, button, col, row, focus)
+
+		if 'press' not in event.split():
+			return
+
+		if button == 4:
+			self.keypress(size, 'up')
+		elif button == 5:
+			self.keypress(size, 'down')
+
 
 class Screen(urwid.WidgetWrap):
 	def __init__(self, controller, filename, file_size, tabsize):
@@ -1216,7 +1227,7 @@ class Screen(urwid.WidgetWrap):
 
 		pile_widgets = [(1, urwid.Filler(top)), self.center]
 
-		self.bottom = ButtonBar(Labels)
+		self.bottom = ButtonBar(controller, Labels)
 		w = urwid.Filler(self.bottom)
 		if SHOW_BUTTONBAR:
 			pile_widgets.append((1, w))

@@ -55,8 +55,10 @@ class CmdBar(urwid.WidgetWrap):
 		self.unarchive_path = controller.unarchive_path
 
 		self.edit = CmdEdit()
+		self.txt = urwid.Text('')
+		self.columns = urwid.Columns([self.txt])
 
-		w = urwid.AttrMap(self.edit, 'default')
+		w = urwid.AttrMap(self.columns, 'default')
 
 		super().__init__(w)
 
@@ -68,17 +70,22 @@ class CmdBar(urwid.WidgetWrap):
 			self.screen.center.focus.force_focus()
 
 	def reset(self):
+		self.action = None
+		self.leader = ''
+
 		self.edit.set_caption('')
 		self.edit.set_edit_text('')
+		self.txt.set_text('')
+		self.columns.contents[0] = (self.txt, self.columns.options())
+
 		self.screen.pile.focus_position = 0
 		if self.forced_focus:
 			self.screen.center.focus.remove_force_focus()
 
-		self.action = None
-		self.leader = ''
+		self.forced_focus = False
+
 		self.file = None
 		self.callback = None
-		self.forced_focus = False
 
 	def execute(self):
 		if self.action == 'mkdir':
@@ -99,6 +106,8 @@ class CmdBar(urwid.WidgetWrap):
 
 		self.edit.set_caption('')
 		self.edit.set_edit_text('')
+		self.txt.set_text('')
+		self.columns.contents[0] = (self.txt, self.columns.options())
 		self.screen.pile.focus_position = 0
 		if self.forced_focus:
 			self.screen.center.focus.remove_force_focus()
@@ -112,13 +121,13 @@ class CmdBar(urwid.WidgetWrap):
 			self.callback = None
 			callback(file)
 
-
 	def set_leader(self, leader):
 		self.leader = leader
-		self.edit.set_caption(self.leader)
+		self.txt.set_text(self.leader)
 
 	def prepare_action(self, action, caption, text, edit_pos=-1, forced_focus=True):
 		self.action = action
+		self.columns.contents[0] = (self.edit, self.columns.options())
 		self.edit.set_caption(caption)
 		self.edit.set_edit_text(text)
 		if edit_pos < 0:
@@ -256,6 +265,5 @@ class CmdBar(urwid.WidgetWrap):
 		self.file = file
 
 	def error(self, e):
-		self.edit.set_caption(('default_error', f'ERROR: {e}'))
-		self.edit.set_edit_text('')
+		self.txt.set_text(('default_error', f'ERROR: {e}'))
 

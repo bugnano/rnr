@@ -254,7 +254,7 @@ class SelectableColumns(urwid.Columns):
 
 class VimListBox(urwid.ListBox):
 	def keypress(self, size, key):
-		if self.controller.leader:
+		if self.controller.screen.command_bar.leader:
 			return key
 
 		if key in ('h', 'left'):
@@ -365,6 +365,41 @@ class VimListBox(urwid.ListBox):
 			self.model.tag_toggle_all()
 		else:
 			return super().keypress(size, key)
+
+	def mouse_event(self, size, event, button, col, row, focus):
+		super().mouse_event(size, event, button, col, row, focus)
+
+		if 'press' not in event.split():
+			return
+
+		if len(self.body) == 0:
+			return
+
+		(cols, rows) = size
+		(offset_rows, inset_rows) = self.get_focus_offset_inset(size)
+
+		if rows < 1:
+			return
+
+		if button == 4:
+			if ((offset_rows + 1) < rows) and ('top' not in self.ends_visible(size, focus)):
+				self.shift_focus(size, offset_rows + 1)
+			else:
+				if self.focus_position > 0:
+					self.focus_position -= 1
+		elif button == 5:
+			if ((offset_rows - 1) >= 0) and ('bottom' not in self.ends_visible(size, focus)):
+				self.shift_focus(size, min(offset_rows - 1, rows - 1))
+			else:
+				if (self.focus_position + 1) < len(self.body):
+					self.focus_position += 1
+
+		try:
+			self.model.show_details(self.model.walker.get_focus()[0].model)
+			self.model.show_preview(self.model.walker.get_focus()[0].model)
+		except AttributeError:
+			self.model.show_details(None)
+			self.model.show_preview(None)
 
 
 class Panel(urwid.WidgetWrap):
@@ -589,7 +624,7 @@ class Panel(urwid.WidgetWrap):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
 		elif self.controller.use_internal_viewer:
-			self.controller.view(self.unarchive_path(file['file'])[0])
+			self.controller.view(self.unarchive_path(file['file'], include_self=False)[0])
 		else:
 			self.controller.loop.stop()
 			subprocess.run([self.controller.pager, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
@@ -620,7 +655,7 @@ class Panel(urwid.WidgetWrap):
 		if file:
 			self.controller.screen.preview_panel.set_title(file['file'].name)
 
-			file_to_preview = self.unarchive_path(file['file'])[0]
+			file_to_preview = self.unarchive_path(file['file'], include_self=False)[0]
 
 			if stat.S_ISDIR(file['stat'].st_mode):
 				self.controller.screen.preview_panel.read_directory(file_to_preview)

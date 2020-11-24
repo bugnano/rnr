@@ -108,7 +108,7 @@ def sort_by_size(a, b, reverse=False):
 		return sort_by_name(a, b, reverse)
 
 
-def get_file_list(cwd, unarchive_path=None):
+def get_file_list(cwd, count_directories, unarchive_path=None):
 	cwd = Path(cwd)
 
 	if unarchive_path is None:
@@ -184,9 +184,13 @@ def get_file_list(cwd, unarchive_path=None):
 
 		if stat.S_ISDIR(st.st_mode):
 			try:
-				length = len(list(file.iterdir()))
-				obj['length'] = (length,)
-				obj['size'] = str(length)
+				if count_directories:
+					length = len(list(file.iterdir()))
+					obj['length'] = (length,)
+					obj['size'] = str(length)
+				else:
+					obj['length'] = (0,)
+					obj['size'] = 'DIR'
 			except (FileNotFoundError, PermissionError):
 				obj['length'] = (-1,)
 				obj['size'] = '?'
@@ -511,8 +515,13 @@ class Panel(urwid.WidgetWrap):
 
 		self.pile.contents[1] = listbox
 
+		if self.unarchive_path(cwd)[1]:
+			count_directories = False
+		else:
+			count_directories = self.controller.count_directories
+
 		try:
-			files = get_file_list(cwd, self.unarchive_path)
+			files = get_file_list(cwd, count_directories=count_directories, unarchive_path=self.unarchive_path)
 		except (FileNotFoundError, PermissionError):
 			return False
 

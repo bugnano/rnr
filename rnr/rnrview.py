@@ -882,7 +882,7 @@ class FileViewListBox(urwid.ListBox):
 	def read_directory(self, filename):
 		self.text_file = True
 
-		files = get_file_list(filename)
+		files = get_file_list(filename, count_directories=False)
 		w = TextDirectoryWalker(files, filename)
 		self.lines = w.lines
 		self.len_lines = w.len_lines

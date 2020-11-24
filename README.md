@@ -130,7 +130,3 @@ operation as well.
   custom commands or keybindings.  This has the advantage that rnr will work the
   same everywhere it is installed.
 
-## Roadmap
-
-* Connect to SFTP servers and transfer files to/from them
-

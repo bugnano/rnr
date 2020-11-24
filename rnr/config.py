@@ -5,6 +5,7 @@ PAGER = os.environ.get('PAGER', 'less')
 EDITOR = os.environ.get('VISUAL', os.environ.get('EDITOR', 'vi'))
 
 USE_INTERNAL_VIEWER = True
+COUNT_DIRECTORIES = True
 
 # Theme
 SHOW_BUTTONBAR = True

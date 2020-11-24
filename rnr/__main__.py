@@ -207,6 +207,7 @@ class App(object):
 		self.pager = PAGER
 		self.editor = EDITOR
 		self.use_internal_viewer = USE_INTERNAL_VIEWER
+		self.count_directories = COUNT_DIRECTORIES
 
 		self.archive_dirs = []
 		self.archives = []

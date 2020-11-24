@@ -513,13 +513,17 @@ class App(object):
 					), self.screen.pile.options())
 
 	def update_focus(self):
-		self.screen.update_focus()
-		if self.screen.center.focus == self.screen.preview_panel:
-			self.focused_quickviewer = True
-			self.set_input_rnrview()
-		else:
-			self.focused_quickviewer = False
-			self.set_input_rnr()
+		try:
+			self.screen.update_focus()
+
+			if self.screen.center.focus == self.screen.preview_panel:
+				self.focused_quickviewer = True
+				self.set_input_rnrview()
+			else:
+				self.focused_quickviewer = False
+				self.set_input_rnr()
+		except AttributeError:
+			pass
 
 	def reload(self, focus_path=None, old_focus=None, only_focused=False):
 		if old_focus is None:

@@ -463,7 +463,9 @@ class Panel(urwid.WidgetWrap):
 
 	def chdir(self, cwd, focus_path=None):
 		self.title.set_title(f' {str(cwd)} ')
+		old_file_filter = self.file_filter
 		self.file_filter = ''
+		old_tagged_files = self.tagged_files.copy()
 		self.tagged_files.clear()
 		self.update_tagged_count()
 
@@ -479,6 +481,10 @@ class Panel(urwid.WidgetWrap):
 		else:
 			self.old_cwd = old_cwd
 			self.title.set_title(f' {str(self.cwd)} ')
+			self.file_filter = old_file_filter
+			self.tagged_files = old_tagged_files
+			self.update_tagged_count()
+			self.show_details(self.walker.get_focus()[0].model)
 			return False
 
 	def reload(self, focus_path=None):
@@ -505,8 +511,8 @@ class Panel(urwid.WidgetWrap):
 			parent = self.cwd
 			while parent.parent != parent:
 				parent = parent.parent
+				self.cwd = old_cwd
 				if self.chdir(parent):
-					self.old_cwd = old_cwd
 					break
 
 	def _reload(self, cwd, focus_path, focus_position=0):
@@ -514,6 +520,7 @@ class Panel(urwid.WidgetWrap):
 
 		listbox = self.pile.contents[1]
 		self.pile.contents[1] = (self.txt_loading, self.pile.options())
+		self.show_details(None)
 		if self.controller.loop:
 			self.controller.loop.draw_screen()
 

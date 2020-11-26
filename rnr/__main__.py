@@ -893,6 +893,7 @@ class App(object):
 
 	def umount_archive(self, file):
 		if (file == self.screen.left.cwd) or (file in self.screen.left.cwd.parents):
+			self.screen.left.cwd = self.screen.left.old_cwd
 			self.screen.left.chdir(file.parent)
 
 		if (file == self.screen.left.old_cwd) or (file in self.screen.left.old_cwd.parents):
@@ -900,6 +901,7 @@ class App(object):
 			self.update_archive_dirs(self.screen.left.cwd, self.screen.left.old_cwd, self.screen.left)
 
 		if (file == self.screen.right.cwd) or (file in self.screen.right.cwd.parents):
+			self.screen.right.cwd = self.screen.right.old_cwd
 			self.screen.right.chdir(file.parent)
 
 		if (file == self.screen.right.old_cwd) or (file in self.screen.right.old_cwd.parents):

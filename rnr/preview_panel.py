@@ -19,26 +19,13 @@
 import sys
 import os
 
-import re
-import stat
-import pwd
-import grp
-import functools
-import collections
-import shutil
-import subprocess
-import signal
-import unicodedata
-
 from pathlib import Path
 
 import urwid
 
-from fuzzyfinder import fuzzyfinder
-
 from . import rnrview
 
-from .utils import (human_readable_size, format_date, tar_stem, tar_suffix, TildeLayout, TLineWidget)
+from .utils import (TildeLayout, TLineWidget)
 from .debug_print import (debug_print, debug_pprint)
 
 

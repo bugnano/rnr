@@ -34,7 +34,7 @@ import urwid
 
 from fuzzyfinder import fuzzyfinder
 
-from .utils import (human_readable_size, format_date, natsort_key, tar_stem, tar_suffix, TildeLayout, TLineWidget)
+from .utils import (human_readable_size, format_date, natsort_key, tar_suffix, TildeLayout, TLineWidget)
 from .debug_print import (debug_print, debug_pprint)
 
 
@@ -67,6 +67,10 @@ def sort_by_name(a, b, reverse=False):
 	elif a['key'] < b['key']:
 		return -1
 	elif a['key'] > b['key']:
+		return 1
+	elif a['file'].name < b['file'].name:
+		return -1
+	elif a['file'].name > b['file'].name:
 		return 1
 	else:
 		return 0
@@ -624,7 +628,12 @@ class Panel(urwid.WidgetWrap):
 			self.open_archive(file)
 		else:
 			self.controller.loop.stop()
-			subprocess.run([self.controller.opener, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
+
+			try:
+				subprocess.run([self.controller.opener, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
+			except KeyboardInterrupt:
+				pass
+
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
 			self.controller.reload()
@@ -636,14 +645,24 @@ class Panel(urwid.WidgetWrap):
 			self.controller.view(self.unarchive_path(file['file'], include_self=False)[0])
 		else:
 			self.controller.loop.stop()
-			subprocess.run([self.controller.pager, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
+
+			try:
+				subprocess.run([self.controller.pager, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
+			except KeyboardInterrupt:
+				pass
+
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
 			self.controller.reload()
 
 	def edit(self, file):
 		self.controller.loop.stop()
-		subprocess.run([self.controller.editor, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
+
+		try:
+			subprocess.run([self.controller.editor, file['file'].name], cwd=self.unarchive_path(self.cwd)[0])
+		except KeyboardInterrupt:
+			pass
+
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
 		self.controller.reload()

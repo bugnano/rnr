@@ -26,7 +26,7 @@ import urwid
 from atomicwrites import atomic_write
 
 from .database import DataBase
-from .utils import (human_readable_size, format_seconds, TildeLayout)
+from .utils import TildeLayout
 from .debug_print import (debug_print, debug_pprint)
 
 

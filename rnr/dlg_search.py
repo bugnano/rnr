@@ -24,6 +24,7 @@ import urwid
 from types import SimpleNamespace
 
 from .utils import TildeLayout
+from .debug_print import (debug_print, debug_pprint)
 
 
 class DlgSearch(urwid.WidgetWrap):

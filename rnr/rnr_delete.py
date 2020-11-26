@@ -22,8 +22,6 @@ import os
 import time
 import errno
 
-from pathlib import Path
-
 from .database import DataBase
 from .utils import (InterruptError, AbortedError, SkippedError)
 from .debug_print import (debug_print, debug_pprint)

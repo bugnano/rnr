@@ -22,6 +22,7 @@ import os
 import urwid
 
 from .utils import (human_readable_size, TildeLayout)
+from .debug_print import (debug_print, debug_pprint)
 
 
 class DlgDirscan(urwid.WidgetWrap):

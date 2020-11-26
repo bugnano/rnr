@@ -22,6 +22,7 @@ import os
 import urwid
 
 from .utils import (human_readable_size, format_seconds, TildeLayout)
+from .debug_print import (debug_print, debug_pprint)
 
 
 class DlgDeleteProgress(urwid.WidgetWrap):

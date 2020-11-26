@@ -20,7 +20,6 @@ import sys
 import os
 
 import argparse
-import shutil
 import subprocess
 import stat
 import signal
@@ -84,7 +83,6 @@ class Screen(urwid.WidgetWrap):
 		self.left = Panel(controller)
 		self.right = Panel(controller)
 		self.preview_panel = PreviewPanel(controller)
-		#self.center = urwid.Columns([self.left, self.preview_panel, self.right])
 		self.center = urwid.Columns([self.left, self.right])
 		self.command_bar = CmdBar(controller, self)
 		w = urwid.Filler(self.command_bar)
@@ -240,10 +238,19 @@ class App(object):
 		if self.monochrome:
 			self.loop.screen.set_terminal_properties(colors=1)
 
-		signal.signal(signal.SIGINT, self.signal_handler)
 		signal.signal(signal.SIGTERM, self.signal_handler)
 
-		self.loop.run()
+		try:
+			self.loop.run()
+		except KeyboardInterrupt:
+			try:
+				self.loop.stop()
+			except AttributeError:
+				pass
+
+			print('Ctrl+C')
+
+			self.cleanup()
 
 	def signal_handler(self, signum, frame):
 		try:
@@ -251,11 +258,11 @@ class App(object):
 		except AttributeError:
 			pass
 
-		if signum == signal.SIGINT:
-			print('Ctrl+C')
-		elif signum == signal.SIGTERM:
-			print('Kill')
+		print('Kill')
 
+		self.cleanup()
+
+	def cleanup(self):
 		self.ev_interrupt.set()
 
 		for ev in self.suspend:

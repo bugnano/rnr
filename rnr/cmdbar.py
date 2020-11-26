@@ -238,7 +238,12 @@ class CmdBar(urwid.WidgetWrap):
 		prompt = ('$' if os.geteuid() else '#')
 		cmd = apply_template(self.edit.get_edit_text(), self.screen, unarchive_path=self.unarchive_path)
 		print(f'[{str(cwd)}]{prompt} {cmd}')
-		subprocess.run(cmd, shell=True, cwd=cwd)
+
+		try:
+			subprocess.run(cmd, shell=True, cwd=cwd)
+		except KeyboardInterrupt:
+			pass
+
 		self.controller.loop.start()
 		os.kill(os.getpid(), signal.SIGWINCH)
 		self.controller.reload()

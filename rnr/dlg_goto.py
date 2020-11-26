@@ -21,6 +21,8 @@ import os
 
 import urwid
 
+from .debug_print import (debug_print, debug_pprint)
+
 
 class DlgGoto(urwid.WidgetWrap):
 	def __init__(self, screen, on_ok, on_cancel, label='Hex offset: '):

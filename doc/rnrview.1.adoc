@@ -2,7 +2,7 @@
 :doctype: manpage
 :author: Franco Bugnano
 :man source: rnrview
-:man version: 1.0.0
+:man version: 1.0.1
 :man manual: rnr manual
 :revdate: 2020-11-26
 

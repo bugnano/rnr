@@ -271,6 +271,10 @@ class App(object):
 		sys.exit(1)
 
 	def keypress(self, key):
+		if self.screen.in_error:
+			self.screen.close_dialog()
+			return
+
 		if key == 'esc':
 			self.screen.command_bar.reset()
 			self.screen.left.filter('')

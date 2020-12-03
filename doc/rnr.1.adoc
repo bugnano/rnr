@@ -2,9 +2,9 @@
 :doctype: manpage
 :author: Franco Bugnano
 :man source: rnr
-:man version: 1.0.1
+:man version: 1.0.2
 :man manual: rnr manual
-:revdate: 2020-11-26
+:revdate: 2020-12-03
 
 
 == NAME
@@ -61,6 +61,7 @@ https://ranger.github.io/[Ranger]
 *k, UP*:: Go to the previous list element
 *l, RIGHT, ENTER*:: Enter directory / Follow symlink / Open file with the selected opener
 *o*:: Open archive as a read-only directory
+*x*:: Execute selected file
 *g, HOME*:: Go to the top of the list
 *G, END*:: Go to the bottom of the list
 *CTRL-B, PAGE UP*:: Go up a page in the list

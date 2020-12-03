@@ -51,6 +51,8 @@ pip3 install --user --upgrade rnr
 rnr
 ```
 
+### CD on exit (bash)
+
 If you're using bash and you want to change directory on exit, you have to add
 a line like this in your `~/.bashrc`:
 
@@ -58,8 +60,22 @@ a line like this in your `~/.bashrc`:
 source ~/.local/share/rnr/rnr.sh
 ```
 
-If you're using fish, then simply copy the file `~/.local/share/rnr/rnr.fish`
-to `~/.config/fish/functions/` (create the directory if it does not exist).
+### CD on exit (fish)
+
+If you're using fish, then simply copy (or, better, symlink) the file
+`~/.local/share/rnr/rnr.fish` to `~/.config/fish/functions/` (create the
+directory if it does not exist).
+
+Note that this script requires at least fish version 3.1.0
+
+### Fix key combinations in terminal
+
+In order to enable the CTRL-Q and CTRL-S key combinations, put the following
+line in your `~/.bashrc` or `~/.config/fish/config.fish`:
+
+```bash
+stty -ixon
+```
 
 ## Documentation
 

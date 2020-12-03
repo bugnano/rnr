@@ -303,12 +303,17 @@ class VimListBox(urwid.ListBox):
 			return retval
 		elif key in ('l', 'right', 'enter'):
 			try:
-				self.model.execute(self.model.walker.get_focus()[0].model)
+				self.model.enter(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				pass
 		elif key == 'o':
 			try:
-				self.model.open_archive(self.model.walker.get_focus()[0].model, fallback_exec=False)
+				self.model.open_archive(self.model.walker.get_focus()[0].model, fallback_enter=False)
+			except AttributeError:
+				pass
+		elif key == 'x':
+			try:
+				self.model.execute(self.model.walker.get_focus()[0].model)
 			except AttributeError:
 				pass
 		elif key in ('g', 'home'):
@@ -603,9 +608,9 @@ class Panel(urwid.WidgetWrap):
 		else:
 			self.filtered_files = self.shown_files[:]
 
-	def open_archive(self, file, fallback_exec=True):
-		if fallback_exec:
-			error_cb = lambda: self.execute(file, open_archive=False)
+	def open_archive(self, file, fallback_enter=True):
+		if fallback_enter:
+			error_cb = lambda: self.enter(file, open_archive=False)
 			show_error = False
 		else:
 			error_cb = None
@@ -613,7 +618,7 @@ class Panel(urwid.WidgetWrap):
 
 		self.controller.mount_archive(file['file'], self, lambda: self.chdir(file['file']), error_cb=error_cb, show_error=show_error)
 
-	def execute(self, file, open_archive=True):
+	def enter(self, file, open_archive=True):
 		if stat.S_ISDIR(file['stat'].st_mode):
 			self.chdir(file['file'])
 		elif 'link_target' in file:
@@ -644,6 +649,24 @@ class Panel(urwid.WidgetWrap):
 			self.controller.loop.start()
 			os.kill(os.getpid(), signal.SIGWINCH)
 			self.controller.reload()
+
+	def execute(self, file):
+		self.controller.loop.stop()
+
+		err = None
+		try:
+			subprocess.run([str(self.unarchive_path(file['file'])[0])], cwd=self.unarchive_path(self.cwd)[0])
+		except OSError as e:
+			err = e
+		except KeyboardInterrupt:
+			pass
+
+		self.controller.loop.start()
+		os.kill(os.getpid(), signal.SIGWINCH)
+		self.controller.reload()
+
+		if err:
+			self.controller.screen.error(f'{err.strerror} ({err.errno})')
 
 	def view(self, file):
 		if stat.S_ISDIR(file['stat'].st_mode):

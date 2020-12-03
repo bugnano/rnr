@@ -161,7 +161,7 @@ def apply_template(text, screen, quote=True, unarchive_path=None):
 		fn_quote = str
 
 	if unarchive_path is None:
-		unarchive_path = lambda x: (x, None, None)
+		unarchive_path = lambda x, include_self=True: (x, None, None)
 
 	cwd = str(screen.center.focus.cwd)
 
@@ -184,7 +184,7 @@ def apply_template(text, screen, quote=True, unarchive_path=None):
 		other = screen.left
 
 	try:
-		other_file = fn_quote(str(unarchive_path(other.get_focus()['file'])[0]))
+		other_file = fn_quote(str(unarchive_path(other.get_focus()['file'], include_self=False)[0]))
 		other_name = fn_quote(tar_stem(other.get_focus()['file']))
 		other_extension = fn_quote(tar_suffix(other.get_focus()['file']))
 	except (TypeError, AttributeError):
@@ -192,7 +192,7 @@ def apply_template(text, screen, quote=True, unarchive_path=None):
 		other_name = fn_quote('')
 		other_extension = fn_quote('')
 
-	other_tagged = ' '.join([fn_quote(str(unarchive_path(x)[0])) for x in other.get_tagged_files()])
+	other_tagged = ' '.join([fn_quote(str(unarchive_path(x, include_self=False)[0])) for x in other.get_tagged_files()])
 	if not current_tagged:
 		other_tagged = fn_quote('')
 

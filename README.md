@@ -34,6 +34,12 @@ Its main goal is to be the most robust file copier in existence.
 
 ![mc-like](https://raw.githubusercontent.com/bugnano/rnr/master/doc/mc-like.png)
 
+## Video Tutorials
+
+https://www.youtube.com/watch?v=dHh-7hX6dRY
+
+https://www.youtube.com/watch?v=17-K43Z2XcU (Italian)
+
 ## System requirements
 
 * Linux (a POSIX-compatible OS like macOS, FreeBSD or Cygwin may work, but

@@ -152,3 +152,10 @@ operation as well.
   custom commands or keybindings.  This has the advantage that rnr will work the
   same everywhere it is installed.
 
+## Note for packagers
+
+If you're packaging rnr for your distribution, consider copying (or symlinking)
+the `rnr.sh` file to the `/etc/profile.d` directory, and the `rnr.fish` file to
+the `/etc/fish/functions` directory, so that rnr automatically changes directory
+on exit, without needing manual configuration.
+

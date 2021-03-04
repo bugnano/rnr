@@ -1,6 +1,6 @@
 #! /usr/bin/env fish
 
-set new_version 1.0.2
+set new_version 1.0.3
 set new_date (date '+%Y-%m-%d')
 
 sed -i -e "s/^\(\s*__version__\s*=\s*\).*/\1'$new_version'/g" rnr/__init__.py

@@ -1,3 +1,8 @@
+* Noteworthy changes in release 1.0.3 (2021-03-04)
+
+The man pages are installed in the share/man/ directory instead of just man/
+Fix crash with filenames containing East Asian Unicode characters
+
 * Noteworthy changes in release 1.0.2 (2020-12-02)
 
 Added command 'x' to execute file

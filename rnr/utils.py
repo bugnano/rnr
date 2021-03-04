@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright (C) 2020  Franco Bugnano
+# Copyright (C) 2020-2021  Franco Bugnano
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@ import re
 from pathlib import Path
 
 import urwid
+
+from urwid.util import str_util
 
 from .debug_print import (debug_print, debug_pprint)
 
@@ -94,15 +96,39 @@ def tar_suffix(file):
 
 class TildeTextLayout(urwid.TextLayout):
 	def layout(self, text, width, align, wrap):
-		if len(text) <= width:
-			return [[(len(text), 0, text.encode('utf-8'))]]
+		text = unicodedata.normalize('NFKC', text)
+		widths = [str_util.get_width(ord(x)) for x in text]
+		text_width = sum(widths)
+		if text_width <= width:
+			return [[(text_width, 0, text.encode('utf-8'))]]
 
 		full_len = max(width - 1, 2)
-		half = int(full_len / 2)
-		left = half
+		left = int(full_len / 2)
 		right = full_len - left
 
-		return [[(width, 0, f'{text[:left]}~{text[-right:]}'[:width].encode('utf-8'))]]
+		left_width = 0
+		for i, e in enumerate(widths):
+			left_width += e
+			if left_width > left:
+				i_left = i
+				break
+
+		right_width = 0
+		for i, e in enumerate(reversed(widths)):
+			right_width += e
+			if right_width > right:
+				i_right = len(text) - i
+				break
+
+		tilde_text = f'{text[:i_left]}~{text[i_right:]}'
+		if len(tilde_text) <= 3:
+			widths = [str_util.get_width(ord(x)) for x in tilde_text]
+			text_width = sum(widths)
+			while text_width > width:
+				tilde_text = tilde_text[:-1]
+				text_width -= widths.pop(-1)
+
+		return [[(width, 0, tilde_text.encode('utf-8'))]]
 
 	def pack(self, maxcol, layout):
 		maxwidth = 0

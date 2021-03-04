@@ -28,7 +28,7 @@ setuptools.setup(
 			'rnr.fish',
 			'rnr.sh',
 		]),
-		('man/man1', [
+		('share/man/man1', [
 			'doc/rnr.1',
 			'doc/rnrview.1',
 		])

@@ -97,10 +97,18 @@ def tar_suffix(file):
 class TildeTextLayout(urwid.TextLayout):
 	def layout(self, text, width, align, wrap):
 		text = unicodedata.normalize('NFKC', text)
+		in_error = True
+		while in_error:
+			try:
+				utf8_text = text.encode('utf-8')
+				in_error = False
+			except UnicodeError as e:
+				text = ''.join([text[:e.start], '?' * (e.end - e.start), text[e.end:]])
+
 		widths = [str_util.get_width(ord(x)) for x in text]
 		text_width = sum(widths)
 		if text_width <= width:
-			return [[(text_width, 0, text.encode('utf-8'))]]
+			return [[(text_width, 0, utf8_text)]]
 
 		full_len = max(width - 1, 2)
 		left = int(full_len / 2)

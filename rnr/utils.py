@@ -103,7 +103,7 @@ class TildeTextLayout(urwid.TextLayout):
 				utf8_text = text.encode('utf-8')
 				in_error = False
 			except UnicodeError as e:
-				text = ''.join([text[:e.start], '?' * (e.end - e.start), text[e.end:]])
+				text = ''.join([text[:e.start], '\uFFFD' * (e.end - e.start), text[e.end:]])
 
 		widths = [str_util.get_width(ord(x)) for x in text]
 		text_width = sum(widths)

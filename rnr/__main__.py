@@ -25,6 +25,7 @@ import stat
 import signal
 import functools
 import tempfile
+import shutil
 
 from pathlib import Path
 from queue import Queue
@@ -214,8 +215,9 @@ class App(object):
 		self.archive_cb = None
 		self.archive_cancel_cb = None
 		self.archive_error_cb = None
-		self.archivemount_proc = None
-		self.archivemount_alarm_handle = None
+		self.archive_mounter_proc = None
+		self.archive_mounter_alarm_handle = None
+		self.archive_mounter = os.path.basename(shutil.which('archivefs') or 'archivemount')
 
 		self.old_screen = None
 		self.loop = None
@@ -931,7 +933,7 @@ class App(object):
 	def mount_archive(self, archive, panel, callback, cancel_cb=None, error_cb=None, show_error=True):
 		archive = Path(archive)
 
-		self.archivemount_alarm_handle = None
+		self.archive_mounter_alarm_handle = None
 
 		(file, archive_file, temp_dir) = self.unarchive_path(archive)
 		if archive == archive_file:
@@ -946,14 +948,14 @@ class App(object):
 
 		self.temp_dir = Path(tempfile.mkdtemp())
 		try:
-			self.archivemount_proc = subprocess.Popen(['archivemount', '-o', 'ro', self.archive_file.name, str(self.temp_dir)], cwd=self.unarchive_path(self.archive_file.parent)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+			self.archive_mounter_proc = subprocess.Popen([self.archive_mounter, '-o', 'ro', self.archive_file.name, str(self.temp_dir)], cwd=self.unarchive_path(self.archive_file.parent)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
 			try:
-				self.archivemount_proc.communicate(timeout=0.05)
+				self.archive_mounter_proc.communicate(timeout=0.05)
 			except subprocess.TimeoutExpired:
-				self.screen.open_cancelable('archivemount', 'Opening archive...', self.on_cancel_archivemount)
+				self.screen.open_cancelable(self.archive_mounter, 'Opening archive...', self.on_cancel_archive_mounter)
 
-			self.archivemount_alarm_cb()
+			self.archive_mounter_alarm_cb()
 		except FileNotFoundError:
 			try:
 				os.rmdir(self.temp_dir)
@@ -961,17 +963,17 @@ class App(object):
 				pass
 
 			if show_error:
-				self.screen.error('archivemount executable not found', callback=self.archive_error_cb)
+				self.screen.error('archivefs/archivemount executable not found', callback=self.archive_error_cb)
 			else:
 				if self.archive_error_cb:
 					self.archive_error_cb()
 
-	def on_cancel_archivemount(self):
+	def on_cancel_archive_mounter(self):
 		self.screen.close_dialog()
-		self.loop.remove_alarm(self.archivemount_alarm_handle)
+		self.loop.remove_alarm(self.archive_mounter_alarm_handle)
 
-		self.archivemount_proc.terminate()
-		while self.archivemount_proc.poll() is None:
+		self.archive_mounter_proc.terminate()
+		while self.archive_mounter_proc.poll() is None:
 			pass
 
 		try:
@@ -984,19 +986,19 @@ class App(object):
 		except OSError:
 			pass
 
-		self.archivemount_proc = None
-		self.archivemount_alarm_handle = None
+		self.archive_mounter_proc = None
+		self.archive_mounter_alarm_handle = None
 
 		if self.archive_cancel_cb:
 			self.archive_cancel_cb()
 
-	def archivemount_alarm_cb(self, loop=None, user_data=None):
-		if self.archivemount_proc.poll() is None:
-			self.archivemount_alarm_handle = self.loop.set_alarm_in(0.05, self.archivemount_alarm_cb)
+	def archive_mounter_alarm_cb(self, loop=None, user_data=None):
+		if self.archive_mounter_proc.poll() is None:
+			self.archive_mounter_alarm_handle = self.loop.set_alarm_in(0.05, self.archive_mounter_alarm_cb)
 		else:
 			self.screen.close_dialog()
 
-			if self.archivemount_proc.returncode != 0:
+			if self.archive_mounter_proc.returncode != 0:
 				try:
 					umount_proc = subprocess.run(['umount', self.temp_dir], cwd=self.unarchive_path(self.archive_file.parent)[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 				except FileNotFoundError:
@@ -1007,14 +1009,14 @@ class App(object):
 				except OSError:
 					pass
 
-				(stdout_data, stderr_data) = self.archivemount_proc.communicate()
+				(stdout_data, stderr_data) = self.archive_mounter_proc.communicate()
 				self.screen.error(stderr_data.strip(), callback=self.archive_error_cb)
 			else:
 				self.add_archive_dir(self.archive_file, self.temp_dir, self.archive_panel)
 				self.archive_cb()
 
-			self.archivemount_proc = None
-			self.archivemount_alarm_handle = None
+			self.archive_mounter_proc = None
+			self.archive_mounter_alarm_handle = None
 
 	def quit(self):
 		cwd = self.screen.center.focus.cwd

@@ -11,7 +11,8 @@ Its main goal is to be the most robust file copier in existence.
 ## Features
 
 * Very fast file and directory browser with Vim-style keys and powerful fuzzy filter
-* Explore compressed archives as normal read-only directories (requires archivemount)
+* Explore compressed archives as normal read-only directories (requires
+  [archivefs](https://github.com/bugnano/archivefs) or archivemount)
 * Fast directory jumping with bookmarks
 * Many file rename options
 * Robust file copy engine with minimal user interaction. Great for copying
@@ -45,7 +46,10 @@ https://www.youtube.com/watch?v=17-K43Z2XcU (Italian)
 * Linux (a POSIX-compatible OS like macOS, FreeBSD or Cygwin may work, but
   it's not officially supported)
 * Python 3.6 or greater
-* archivemount (Optional, but recommended)
+
+### For compressed archive support
+* [archivefs](https://github.com/bugnano/archivefs) (Recommended), or
+  archivemount (Much slower and somewhat buggier than archivefs)
 
 ## Installation and running
 

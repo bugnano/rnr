@@ -678,7 +678,7 @@ class App(object):
 					pass
 				else:
 					self.do_dirscan(files, cwd, functools.partial(self.do_copy, cwd=cwd, files=files, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
-		except (FileNotFoundError, PermissionError) as e:
+		except OSError as e:
 			self.screen.error(f'{e.strerror} ({e.errno})')
 
 	def do_copy(self, file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id):
@@ -755,7 +755,7 @@ class App(object):
 						self.umount_archive(file)
 
 					self.do_dirscan(files, cwd, functools.partial(self.do_move, files=files, cwd=cwd, dest=str(path_dest), on_conflict=on_conflict, job_id=None))
-		except (FileNotFoundError, PermissionError) as e:
+		except OSError as e:
 			self.screen.error(f'{e.strerror} ({e.errno})')
 
 	def do_move(self, file_list, scan_error, scan_skipped, files, cwd, dest, on_conflict, job_id):
@@ -1036,7 +1036,7 @@ class App(object):
 			try:
 				with open(self.printwd, 'w') as fh:
 					fh.write(str(cwd))
-			except (FileNotFoundError, PermissionError):
+			except OSError:
 				pass
 
 		raise urwid.ExitMainLoop()

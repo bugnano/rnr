@@ -139,7 +139,7 @@ def get_file_list(cwd, count_directories, unarchive_path=None):
 
 		try:
 			lstat = file.lstat()
-		except FileNotFoundError:
+		except OSError:
 			continue
 
 		obj['lstat'] = lstat
@@ -153,7 +153,7 @@ def get_file_list(cwd, count_directories, unarchive_path=None):
 				else:
 					obj['label'] = f'@{file.name}'
 					obj['palette'] = 'symlink'
-			except (FileNotFoundError, PermissionError):
+			except OSError:
 				st = lstat
 				obj['label'] = f'!{file.name}'
 				obj['palette'] = 'stalelink'
@@ -195,7 +195,7 @@ def get_file_list(cwd, count_directories, unarchive_path=None):
 				else:
 					obj['length'] = (0,)
 					obj['size'] = 'DIR'
-			except (FileNotFoundError, PermissionError):
+			except OSError:
 				obj['length'] = (-1,)
 				obj['size'] = '?'
 		elif stat.S_ISCHR(lstat.st_mode) or stat.S_ISBLK(lstat.st_mode):
@@ -229,7 +229,7 @@ def get_file_list(cwd, count_directories, unarchive_path=None):
 					obj['link_target'] = Path(os.path.normpath(link_target))
 				else:
 					obj['link_target'] = Path(os.path.normpath(shown_file.parent / link_target))
-			except (FileNotFoundError, PermissionError):
+			except OSError:
 				obj['details'] = f'{obj["details"]} -> ?'
 				obj['link_target'] = shown_file
 		else:
@@ -538,7 +538,7 @@ class Panel(urwid.WidgetWrap):
 
 		try:
 			files = get_file_list(cwd, count_directories=count_directories, unarchive_path=self.unarchive_path)
-		except (FileNotFoundError, PermissionError):
+		except OSError:
 			return False
 
 		self.show_preview(None)
@@ -634,7 +634,7 @@ class Panel(urwid.WidgetWrap):
 								break
 					else:
 						self.chdir(file['link_target'].parent, file['link_target'])
-			except (FileNotFoundError, PermissionError):
+			except OSError:
 				pass
 		elif open_archive and (file['extension'] in ARCHIVE_EXTENSIONS):
 			self.open_archive(file)

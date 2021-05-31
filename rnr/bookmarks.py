@@ -42,7 +42,7 @@ class Bookmarks(collections.UserDict):
 						continue
 
 					self.data[line[0]] = line[2:]
-		except (FileNotFoundError, PermissionError, IsADirectoryError):
+		except OSError:
 			pass
 
 	def __setitem__(self, key, item):
@@ -59,6 +59,6 @@ class Bookmarks(collections.UserDict):
 				with atomic_write(self.file, overwrite=True) as f:
 					for k, v in sorted(self.data.items()):
 						f.write(f'{k}:{v}\n')
-			except (FileNotFoundError, PermissionError, IsADirectoryError):
+			except OSError:
 				pass
 

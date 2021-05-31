@@ -39,7 +39,7 @@ except ModuleNotFoundError:
 	try:
 		shutil.copy(Path(__file__).parent / 'config.py', CONFIG_DIR)
 		from config import *
-	except (ModuleNotFoundError, FileNotFoundError, PermissionError, IsADirectoryError):
+	except (ModuleNotFoundError, OSError):
 		pass
 
 sys.dont_write_bytecode = _dont_write_bytecode

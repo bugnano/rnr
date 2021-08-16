@@ -33,18 +33,18 @@ from .debug_print import (debug_print, debug_pprint)
 from .fallocate import *
 
 
-def rnr_copyfile(cur_file, cur_target, file_size, block_size, resume, info, timers, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort):
+def rnr_copyfile(cur_file, cur_target, file_size, block_size, resume, info, timers, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, dbfile):
 	with open(cur_file, 'rb') as fh:
 		if resume:
 			try:
-				target_fd = os.open(cur_target, os.O_WRONLY | os.O_DSYNC, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
+				target_fd = os.open(cur_target, os.O_WRONLY | (os.O_DSYNC if dbfile else 0), stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
 			except OSError as e:
 				if e.errno == errno.EOPNOTSUPP:
-					target_fd = os.open(cur_target, os.O_TRUNC | os.O_WRONLY | os.O_DSYNC, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
+					target_fd = os.open(cur_target, os.O_TRUNC | os.O_WRONLY | (os.O_DSYNC if dbfile else 0), stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
 				else:
 					raise
 		else:
-			target_fd = os.open(cur_target, os.O_CREAT | os.O_EXCL | os.O_TRUNC | os.O_WRONLY | os.O_DSYNC, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
+			target_fd = os.open(cur_target, os.O_CREAT | os.O_EXCL | os.O_TRUNC | os.O_WRONLY | (os.O_DSYNC if dbfile else 0), stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
 
 		try:
 			if resume:
@@ -365,7 +365,7 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 							db.set_dir_list(job_id, dir_list)
 					elif file['is_file']:
 						when = 'copyfile'
-						rnr_copyfile(actual_file, actual_target, file['lstat'].st_size, block_size, resume, info, timers, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort)
+						rnr_copyfile(actual_file, actual_target, file['lstat'].st_size, block_size, resume, info, timers, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, dbfile)
 					else:
 						in_error = True
 						message = f'Special file'
@@ -383,22 +383,29 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 									try:
 										os.lchown(actual_target, -1, file['lstat'].st_gid)
 									except OSError as e:
-										if e.errno in (errno.EPERM, errno.ENOSYS):
+										if e.errno in (errno.EPERM, errno.ENOSYS, errno.ENOTSUP):
 											pass
 										else:
 											raise
-								elif e.errno == errno.ENOSYS:
+								elif e.errno in (errno.ENOSYS, errno.ENOTSUP):
 									pass
 								else:
 									raise
 
 							when = 'copystat'
-							shutil.copystat(actual_file, actual_target, follow_symlinks=False)
+							try:
+								shutil.copystat(actual_file, actual_target, follow_symlinks=False)
+							except OSError as e:
+								if e.errno in (errno.ENOSYS, errno.ENOTSUP):
+									pass
+								else:
+									raise
 
 						when = 'fsync'
 						parent_fd = os.open(parent_dir, 0)
 						try:
-							os.fsync(parent_fd)
+							if dbfile:
+								os.fsync(parent_fd)
 						finally:
 							os.close(parent_fd)
 
@@ -410,7 +417,8 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 					when = 'fsync'
 					parent_fd = os.open(actual_file.parent, 0)
 					try:
-						os.fsync(parent_fd)
+						if dbfile:
+							os.fsync(parent_fd)
 					finally:
 						os.close(parent_fd)
 
@@ -525,22 +533,29 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 							try:
 								os.lchown(actual_target, -1, file['lstat'].st_gid)
 							except OSError as e:
-								if e.errno in (errno.EPERM, errno.ENOSYS):
+								if e.errno in (errno.EPERM, errno.ENOSYS, errno.ENOTSUP):
 									pass
 								else:
 									raise
-						elif e.errno == errno.ENOSYS:
+						elif e.errno in (errno.ENOSYS, errno.ENOTSUP):
 							pass
 						else:
 							raise
 
 					when = 'copystat'
-					shutil.copystat(actual_file, actual_target, follow_symlinks=False)
+					try:
+						shutil.copystat(actual_file, actual_target, follow_symlinks=False)
+					except OSError as e:
+						if e.errno in (errno.ENOSYS, errno.ENOTSUP):
+							pass
+						else:
+							raise
 
 				when = 'fsync'
 				parent_fd = os.open(parent_dir, 0)
 				try:
-					os.fsync(parent_fd)
+					if dbfile:
+						os.fsync(parent_fd)
 				finally:
 					os.close(parent_fd)
 
@@ -551,7 +566,8 @@ def rnr_cpmv(mode, files, cwd, dest, on_conflict, fd, q, ev_skip, ev_suspend, ev
 					when = 'fsync'
 					parent_fd = os.open(actual_file.parent, 0)
 					try:
-						os.fsync(parent_fd)
+						if dbfile:
+							os.fsync(parent_fd)
 					finally:
 						os.close(parent_fd)
 			except OSError as e:

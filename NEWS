@@ -1,3 +1,8 @@
+* Noteworthy changes in release 1.0.7 (2021-08-16)
+
+Don't report error if the file system does not support copystat
+Don't do synchronous filesystem operations if they are not logged to the database. This is a tremendous speedup.
+
 * Noteworthy changes in release 1.0.6 (2021-05-31)
 
 Catch OSError instead of (FileNotFoundError, PermissionError). This should fix some crashes.

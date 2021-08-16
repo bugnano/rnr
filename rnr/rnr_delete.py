@@ -99,7 +99,8 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nod
 
 				parent_fd = os.open(parent_dir, 0)
 				try:
-					os.fsync(parent_fd)
+					if dbfile:
+						os.fsync(parent_fd)
 				finally:
 					os.close(parent_fd)
 

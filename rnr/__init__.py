@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright (C) 2020-2021  Franco Bugnano
+# Copyright (C) 2020-2022  Franco Bugnano
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,5 +20,5 @@ import sys
 import os
 
 
-__version__ = '1.0.7'
+__version__ = '1.0.8'
 

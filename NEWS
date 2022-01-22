@@ -1,3 +1,10 @@
+* Noteworthy changes in release 1.0.8 (2022-01-06)
+
+Minor cosmetic fix when tagging files
+Fix crash when going from an empty directory to a non-existent bookmark
+Fix crash when launching rnr from a deleted directory
+Fix crash when creating multiple directories
+
 * Noteworthy changes in release 1.0.7 (2021-08-16)
 
 Don't report error if the file system does not support copystat

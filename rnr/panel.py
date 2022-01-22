@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright (C) 2020-2021  Franco Bugnano
+# Copyright (C) 2020-2022  Franco Bugnano
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -372,8 +372,7 @@ class VimListBox(urwid.ListBox):
 				pass
 		elif key in ('insert', ' '):
 			if self.model.tag_toggle():
-				if (self.focus_position + 1) < len(self.model.walker):
-					super().keypress(size, 'down')
+				self.keypress(size, 'down')
 		elif key == '*':
 			self.model.tag_toggle_all()
 		else:
@@ -444,7 +443,17 @@ class Panel(urwid.WidgetWrap):
 
 		self.pile = urwid.Pile([('pack', title), listbox, ('pack', details_separator), ('pack', details), ('pack', footer)])
 
-		cwd = Path.cwd()
+		try:
+			cwd = Path.cwd()
+		except OSError:
+			cwd = Path(os.environ['PWD'])
+			while cwd.parent != cwd:
+				try:
+					os.listdir(cwd)
+					break
+				except OSError:
+					cwd = cwd.parent
+
 		self.old_cwd = cwd
 		self.cwd = cwd
 		self.show_hidden = False
@@ -489,7 +498,12 @@ class Panel(urwid.WidgetWrap):
 			self.file_filter = old_file_filter
 			self.tagged_files = old_tagged_files
 			self.update_tagged_count()
-			self.show_details(self.walker.get_focus()[0].model)
+
+			try:
+				self.show_details(self.walker.get_focus()[0].model)
+			except AttributeError:
+				self.show_details(None)
+
 			return False
 
 	def reload(self, focus_path=None):
@@ -507,6 +521,15 @@ class Panel(urwid.WidgetWrap):
 			obj, focus_position = self.walker.get_focus()
 			if focus_path is None:
 				focus_path = obj.model['file']
+			else:
+				try:
+					rel_path = focus_path.relative_to(self.cwd)
+					focus_path = self.cwd / rel_path.parts[0]
+				except (ValueError, IndexError):
+					pass
+
+			if focus_position is None:
+				focus_position = 0
 		except AttributeError:
 			focus_path = None
 			focus_position = 0

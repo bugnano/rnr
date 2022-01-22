@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright (C) 2020-2021  Franco Bugnano
+# Copyright (C) 2020-2022  Franco Bugnano
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -148,6 +148,9 @@ def rnr_delete(files, fd, q, ev_skip, ev_suspend, ev_interrupt, ev_abort, ev_nod
 
 		info['bytes'] += file['lstat'].st_size
 		info['files'] += 1
+
+	if not dbfile:
+		os.sync()
 
 	q.put({'result': completed_list, 'error': error_list, 'skipped': skipped_list, 'aborted': aborted_list})
 	try:

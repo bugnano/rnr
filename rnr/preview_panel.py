@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright (C) 2020-2021  Franco Bugnano
+# Copyright (C) 2020-2022  Franco Bugnano
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -49,7 +49,18 @@ class PreviewPanel(urwid.WidgetWrap):
 
 		self.focused = False
 
-		self.cwd = Path.cwd()
+		try:
+			cwd = Path.cwd()
+		except OSError:
+			cwd = Path(os.environ['PWD'])
+			while cwd.parent != cwd:
+				try:
+					os.listdir(cwd)
+					break
+				except OSError:
+					cwd = cwd.parent
+
+		self.cwd = cwd
 
 		super().__init__(self.pile)
 

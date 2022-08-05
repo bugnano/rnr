@@ -27,6 +27,8 @@ import collections
 import shutil
 import subprocess
 import signal
+import fnmatch
+import re
 
 from pathlib import Path
 
@@ -869,11 +871,13 @@ class Panel(urwid.WidgetWrap):
 		self.update_tagged_count()
 
 	def tag_glob(self, pattern):
+		expression = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
+
 		try:
 			for line in self.walker:
 				file = line.model['file']
 
-				if file.match(pattern):
+				if expression.match(file.name):
 					self.tagged_files.add(file)
 					line.set_attr_map({None: 'marked'})
 					line.set_focus_map({None: 'markselect'})
@@ -883,11 +887,13 @@ class Panel(urwid.WidgetWrap):
 		self.update_tagged_count()
 
 	def untag_glob(self, pattern):
+		expression = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
+
 		try:
 			for line in self.walker:
 				file = line.model['file']
 
-				if file.match(pattern):
+				if expression.match(file.name):
 					self.tagged_files.discard(file)
 					line.set_attr_map({None: line.model['palette']})
 					line.set_focus_map({None: 'selected'})

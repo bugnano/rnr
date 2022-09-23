@@ -154,7 +154,10 @@ def get_file_list(cwd, count_directories, unarchive_path=None):
 					obj['palette'] = 'dir_symlink'
 				else:
 					obj['label'] = f'@{file.name}'
-					obj['palette'] = 'symlink'
+					if obj['extension'] in ARCHIVE_EXTENSIONS:
+						obj['palette'] = 'archive'
+					else:
+						obj['palette'] = 'symlink'
 			except OSError:
 				st = lstat
 				obj['label'] = f'!{file.name}'
@@ -178,7 +181,10 @@ def get_file_list(cwd, count_directories, unarchive_path=None):
 				obj['palette'] = 'special'
 			elif lstat.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
 				obj['label'] = f'*{file.name}'
-				obj['palette'] = 'executable'
+				if obj['extension'] in ARCHIVE_EXTENSIONS:
+					obj['palette'] = 'archive'
+				else:
+					obj['palette'] = 'executable'
 			else:
 				obj['label'] = f' {file.name}'
 				if obj['extension'] in ARCHIVE_EXTENSIONS:

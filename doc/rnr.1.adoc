@@ -2,9 +2,9 @@
 :doctype: manpage
 :author: Franco Bugnano
 :man source: rnr
-:man version: 1.0.9
+:man version: 1.0.10
 :man manual: rnr manual
-:revdate: 2022-08-05
+:revdate: 2022-11-05
 
 
 == NAME
@@ -36,6 +36,8 @@ https://ranger.github.io/[Ranger]
 	Do not use database (Takes precedence over *-D*)
 *-b, --nocolor*::
 	Requests to run in black and white
+*-v, --vertical*::
+	Use vertical panel layout
 *-d, --debug*::
 	Activate debug mode
 
@@ -51,6 +53,7 @@ https://ranger.github.io/[Ranger]
 *TAB*:: Change active panel
 *ALT-I*:: Set the other panel to the current directory
 *ALT-O*:: Set the other panel to the highlited directory
+*ALT-V*:: Toggle vertical panel layout
 *v, F3*:: View file with the selected pager / Enter directory
 *e, F4*:: Edit file/directory with the selected editor
 *F7*:: Make directory

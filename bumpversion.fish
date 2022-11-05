@@ -1,6 +1,6 @@
 #! /usr/bin/env fish
 
-set new_version 1.0.9
+set new_version 1.0.10
 set new_date (date '+%Y-%m-%d')
 set new_year (date '+%Y')
 

@@ -1318,7 +1318,7 @@ def keypress(controller, key):
 		controller.screen.list_box.search_next()
 	elif key == 'N':
 		controller.screen.list_box.search_prev()
-	elif key in ('tab', 'shift tab', 'ctrl u', 'ctrl q'):
+	elif key in ('tab', 'shift tab', 'ctrl u', 'ctrl q', 'meta v'):
 		if controller.focused_quickviewer:
 			controller.set_input_rnr()
 			controller.keypress(key)

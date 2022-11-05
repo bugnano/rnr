@@ -79,12 +79,19 @@ Labels = [
 
 
 class Screen(urwid.WidgetWrap):
-	def __init__(self, controller):
+	def __init__(self, controller, vertical):
 		self.controller = controller
+		self.vertical = vertical
+
 		self.left = Panel(controller)
 		self.right = Panel(controller)
 		self.preview_panel = PreviewPanel(controller)
-		self.center = urwid.Columns([self.left, self.right])
+
+		if vertical:
+			self.center = urwid.Pile([self.left, self.right])
+		else:
+			self.center = urwid.Columns([self.left, self.right])
+
 		self.command_bar = CmdBar(controller, self)
 		w = urwid.Filler(self.command_bar)
 		pile_widgets = [self.center, (1, w)]
@@ -185,7 +192,7 @@ class Screen(urwid.WidgetWrap):
 
 
 class App(object):
-	def __init__(self, printwd, dbfile, monochrome, tabsize):
+	def __init__(self, printwd, dbfile, monochrome, vertical, tabsize):
 		self.printwd = printwd
 
 		if not dbfile:
@@ -221,7 +228,7 @@ class App(object):
 
 		self.old_screen = None
 		self.loop = None
-		self.screen = Screen(self)
+		self.screen = Screen(self, vertical)
 		self.screen.update_focus()
 		self.ev_interrupt = Event()
 		self.suspend = set()
@@ -438,6 +445,17 @@ class App(object):
 
 				self.update_focus()
 				self.reload()
+			elif key == 'meta v':
+				focus_position = self.screen.center.focus_position
+				center = [x[0] for x in self.screen.center.contents]
+				if self.screen.vertical:
+					self.screen.center = urwid.Columns(center)
+				else:
+					self.screen.center = urwid.Pile(center)
+				self.screen.vertical = not self.screen.vertical
+				self.screen.center.focus_position = focus_position
+				self.screen.pile.contents[self.screen.main_area] = (self.screen.center, self.screen.pile.options())
+				self.update_focus()
 			elif key == 'f7':
 				self.screen.command_bar.mkdir(self.screen.center.focus.cwd)
 			elif key == 'c':
@@ -1049,6 +1067,7 @@ def main():
 	parser.add_argument('-D', '--database', help='Specify database file to use (default: %(default)s)', metavar='<file>', default=str(DATA_DIR / 'rnr.db'), dest='dbfile')
 	parser.add_argument('-n', '--nodb', help='Do not use database', action='store_false', dest='use_db')
 	parser.add_argument('-b', '--nocolor', help='Requests to run in black and white', action='store_true', dest='monochrome')
+	parser.add_argument('-v', '--vertical', help='Use vertical panel layout', action='store_true', dest='vertical')
 	parser.add_argument('-t', '--tabsize', help='set tab size for viewer (default: %(default)d)', type=int, default=TAB_SIZE)
 	parser.add_argument('-d', '--debug', help='activate debug mode', action='store_true')
 	args = parser.parse_args()
@@ -1061,7 +1080,7 @@ def main():
 	else:
 		dbfile = None
 
-	app = App(args.printwd, dbfile, args.monochrome, args.tabsize)
+	app = App(args.printwd, dbfile, args.monochrome, args.vertical, args.tabsize)
 	app.run()
 
 

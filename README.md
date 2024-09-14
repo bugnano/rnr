@@ -1,5 +1,9 @@
 # The RNR File Manager (RNR's Not Ranger)
 
+## Deprecated
+
+rnr is deprecated in favour of fcd (https://github.com/bugnano/fcd)
+
 The RNR File Manager (RNR's Not Ranger) is a text based file manager that
 combines the best features of
 [Midnight Commander](https://midnight-commander.org/) and
